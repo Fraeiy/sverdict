@@ -82,11 +82,11 @@ function saveMarkets(markets) {
   } catch { /* ignore */ }
 }
 
-function escrowForMarket(market, identity) {
-  return market.escrowAddress || identity?.nametag || identity?.directAddress
+function escrowForMarket(market, adminDirectAddress) {
+  return market.escrowAddress || adminDirectAddress
 }
 
-export function useMarkets({ identity, sendPayment, refreshBalance, signMessage, sendDM }) {
+export function useMarkets({ identity, sendPayment, refreshBalance, signMessage, sendDM, adminDirectAddress, isAdmin }) {
   const [markets, setMarkets] = useState(loadMarkets)
   const [positions, setPositions] = useState([])
 
@@ -187,9 +187,10 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
   const createMarket = useCallback(async ({ question, category, daysOpen }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
+    if (!isAdmin) throw new Error('Admin wallet required to create markets')
 
     const id = 'mkt_' + Date.now()
-    const escrow = identity.nametag || identity.directAddress
+    const escrow = adminDirectAddress
     const marketData = {
       id,
       question,
@@ -217,12 +218,12 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     persist(prev => [{ ...market, shareCode: createdPacket.shareCode }, ...prev])
     return { ...market, shareCode: createdPacket.shareCode }
-  }, [identity, persist, signSphereRecord, emitMarketPacket])
+  }, [identity, isAdmin, adminDirectAddress, persist, signSphereRecord, emitMarketPacket])
 
   const placeBet = useCallback(async ({ market, side, amountHuman }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
 
-    const recipient = escrowForMarket(market, identity)
+    const recipient = escrowForMarket(market, adminDirectAddress)
     if (!recipient) throw new Error('Market escrow address missing')
 
     const betId = 'bet_' + Date.now()
@@ -286,10 +287,11 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     if (refreshBalance) await refreshBalance()
     return betRecord
-  }, [identity, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
+  }, [identity, adminDirectAddress, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
 
   const resolveMarket = useCallback(async ({ market, resolution }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
+    if (!isAdmin) throw new Error('Admin wallet required to resolve markets')
     const resolutionData = {
       marketId: market.id,
       resolution,
@@ -342,7 +344,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     if (refreshBalance) await refreshBalance()
     return { marketId: market.id, resolution }
-  }, [identity, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
+  }, [identity, isAdmin, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
 
   return {
     markets,

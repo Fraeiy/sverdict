@@ -3,6 +3,16 @@ import { useWalletConnect } from './useWalletConnect'
 import { useMarkets } from './useMarkets'
 import './App.css'
 
+const ADMIN_NAMETAG = 'sphere-predict'
+const ADMIN_DIRECT_ADDRESS = 'DIRECT://00003db7de43899584dd9a5306096750f32e4c06b201c8e99adf4b8e34e4f2d94dde41318434'
+
+function isAdminIdentity(identity) {
+  if (!identity) return false
+  const nametag = String(identity.nametag || '').replace(/^@/, '').toLowerCase()
+  const directAddress = String(identity.directAddress || '').toUpperCase()
+  return nametag === ADMIN_NAMETAG || directAddress === ADMIN_DIRECT_ADDRESS.toUpperCase()
+}
+
 function yesPct(m) {
   const t = (m.yesPool || 0) + (m.noPool || 0)
   if (!t) return 50
@@ -292,12 +302,15 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
 
 export default function App() {
   const wallet = useWalletConnect()
+  const adminConnected = isAdminIdentity(wallet.identity)
   const { markets, positions, createMarket, placeBet, resolveMarket, importMarketShare } = useMarkets({
     identity: wallet.identity,
     sendPayment: wallet.sendPayment,
     refreshBalance: wallet.refreshBalance,
     signMessage: wallet.signMessage,
     sendDM: wallet.sendDM,
+    adminDirectAddress: ADMIN_DIRECT_ADDRESS,
+    isAdmin: adminConnected,
   })
 
   const [page, setPage] = useState('markets')
@@ -309,6 +322,7 @@ export default function App() {
   const [newDays, setNewDays] = useState(7)
   const [creating, setCreating] = useState(false)
   const [importCode, setImportCode] = useState('')
+  const activePage = adminConnected || page !== 'admin' ? page : 'markets'
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type })
@@ -402,8 +416,8 @@ export default function App() {
       <header>
         <div className="logo">SPHERE<span>//</span>PREDICT</div>
         <nav className="nav-tabs">
-          {['markets', 'portfolio', 'admin'].map(p => (
-            <button key={p} className={`nav-tab${page === p ? ' active' : ''}`} onClick={() => setPage(p)}>
+          {['markets', 'portfolio', ...(adminConnected ? ['admin'] : [])].map(p => (
+            <button key={p} className={`nav-tab${activePage === p ? ' active' : ''}`} onClick={() => setPage(p)}>
               {p.charAt(0).toUpperCase() + p.slice(1)}
             </button>
           ))}
@@ -419,7 +433,7 @@ export default function App() {
       <Ticker markets={markets} />
 
       <main>
-        {page === 'markets' && (
+        {activePage === 'markets' && (
           <div className="page active">
             <div className="page-header">
               <div>
@@ -453,7 +467,7 @@ export default function App() {
           </div>
         )}
 
-        {page === 'portfolio' && (
+        {activePage === 'portfolio' && (
           <div className="page active">
             <div className="page-header">
               <div>
@@ -499,7 +513,7 @@ export default function App() {
           </div>
         )}
 
-        {page === 'admin' && (
+        {activePage === 'admin' && adminConnected && (
           <div className="page active">
             <div className="page-header">
               <div>
