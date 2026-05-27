@@ -9,7 +9,7 @@ import {
 } from '@unicitylabs/sphere-sdk/connect'
 import { PostMessageTransport, ExtensionTransport } from '@unicitylabs/sphere-sdk/connect/browser'
 import { isInIframe, hasExtension } from './lib/detection'
-import { toHuman, toRawString } from './lib/amount'
+import { toHuman } from './lib/amount'
 
 const WALLET_URL = import.meta.env.VITE_WALLET_URL || 'https://sphere.unicity.network'
 const SESSION_KEY_POPUP = 'sphere-connect-popup-session'
@@ -267,7 +267,7 @@ export function useWalletConnect() {
         to = '@' + to.replace(/^@/, '')
       }
     }
-    const params = { to, amount: toRawString(amountHuman), coinId }
+    const params = { to, amount: String(amountHuman), coinId }
     if (memo) params.memo = memo
     const result = await intent(INTENT_ACTIONS.SEND, params)
     await refreshBalance()
