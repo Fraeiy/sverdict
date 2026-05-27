@@ -90,7 +90,7 @@ function ConnectScreen({ wallet }) {
         {wallet.error && <p className="connect-error">{wallet.error}</p>}
         <p className="connect-hint">
           New to Sphere and don't have a wallet?{' '}
-          <a href="https://unicity.io/sphere" target="_blank" rel="noreferrer">
+          <a href="https://sphere.unicity.network" target="_blank" rel="noreferrer">
             Create one here
           </a>.
         </p>
