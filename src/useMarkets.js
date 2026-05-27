@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { buildSignedPayload, verifyPayloadSignature, encodeMarketPacket, decodeMarketPacket } from './lib/marketProtocol'
 
 const STORAGE_KEY = 'sphere-predict-markets-v2'
 
@@ -13,15 +14,66 @@ const SEED_MARKETS = [
   { id: 'm8', category: 'SPORTS', status: 'open', question: 'Will any team score 200+ points in an NBA game by 2027?', deadline: Date.now() + 200 * 864e5, yesPool: 250, noPool: 1750, bets: [] },
 ]
 
+function cloneSeedMarkets() {
+  return SEED_MARKETS.map(market => ({ ...market, createdAt: Date.now() }))
+}
+
+function normalizeBet(bet) {
+  if (!bet || typeof bet !== 'object') return null
+  const signedMessage = bet.signedMessage || null
+  const signature = bet.signature || null
+  const publicKey = bet.publicKey || null
+  const verified = Boolean(signedMessage && signature && publicKey && verifyPayloadSignature(signedMessage, signature, publicKey))
+  return {
+    ...bet,
+    verified,
+  }
+}
+
+function normalizeMarket(market) {
+  if (!market || typeof market !== 'object') return null
+  const bets = Array.isArray(market.bets) ? market.bets.map(normalizeBet).filter(Boolean) : []
+  const signedMessage = market.signedMessage || null
+  const signature = market.signature || null
+  const publicKey = market.publicKey || null
+  const verified = Boolean(signedMessage && signature && publicKey && verifyPayloadSignature(signedMessage, signature, publicKey))
+  return {
+    ...market,
+    bets,
+    proof: {
+      verified,
+      signed: Boolean(signature),
+      publicKey,
+    },
+    shareCode: market.shareCode || null,
+  }
+}
+
+function mergeMarketRecord(existing, incoming) {
+  if (!existing) return incoming
+  const betsById = new Map((existing.bets || []).map(bet => [bet.betId || bet.txId || `${bet.marketId}:${bet.ts}`, bet]))
+  for (const bet of incoming.bets || []) {
+    const key = bet.betId || bet.txId || `${bet.marketId}:${bet.ts}`
+    betsById.set(key, bet)
+  }
+  return {
+    ...existing,
+    ...incoming,
+    bets: [...betsById.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0)),
+    yesPool: Number(incoming.yesPool ?? existing.yesPool ?? 0),
+    noPool: Number(incoming.noPool ?? existing.noPool ?? 0),
+  }
+}
+
 function loadMarkets() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length) return parsed
+      if (Array.isArray(parsed) && parsed.length) return parsed.map(normalizeMarket).filter(Boolean)
     }
   } catch { /* ignore */ }
-  return SEED_MARKETS.map(m => ({ ...m, createdAt: Date.now() }))
+  return cloneSeedMarkets()
 }
 
 function saveMarkets(markets) {
@@ -34,7 +86,7 @@ function escrowForMarket(market, identity) {
   return market.escrowAddress || identity?.nametag || identity?.directAddress
 }
 
-export function useMarkets({ identity, sendPayment, refreshBalance }) {
+export function useMarkets({ identity, sendPayment, refreshBalance, signMessage, sendDM }) {
   const [markets, setMarkets] = useState(loadMarkets)
   const [positions, setPositions] = useState([])
 
@@ -49,30 +101,123 @@ export function useMarkets({ identity, sendPayment, refreshBalance }) {
     })
   }, [])
 
+  const signSphereRecord = useCallback(async (kind, data) => {
+    if (!signMessage) throw new Error('Connect your Sphere wallet first')
+    const signedMessage = buildSignedPayload(kind, data)
+    const { signature, publicKey } = await signMessage(signedMessage)
+    return { signedMessage, signature, publicKey }
+  }, [signMessage])
+
+  const emitMarketPacket = useCallback(async (type, market, payload = {}, recipients = []) => {
+    const packet = {
+      protocol: 'sphere-predict-v1',
+      type,
+      marketId: market.id,
+      payload,
+      createdAt: Date.now(),
+    }
+    const signed = await signSphereRecord(`market:${type}`, packet)
+    const shareCode = encodeMarketPacket({ ...packet, ...signed })
+
+    if (sendDM && recipients.length) {
+      await Promise.all(recipients.filter(Boolean).map(recipient => sendDM({ recipient, content: shareCode }).catch(() => null)))
+    }
+
+    return { ...packet, ...signed, shareCode }
+  }, [sendDM, signSphereRecord])
+
+  const importMarketShare = useCallback(async (content) => {
+    const packet = decodeMarketPacket(content)
+    if (!packet || packet.protocol !== 'sphere-predict-v1') return null
+    if (!verifyPayloadSignature(packet.signedMessage, packet.signature, packet.publicKey)) return null
+
+    if (packet.type === 'create') {
+      const incoming = normalizeMarket({
+        id: packet.marketId,
+        ...packet.payload,
+        ...packet,
+        shareCode: content,
+      })
+      if (!incoming?.id) return null
+      persist(prev => {
+        const idx = prev.findIndex(m => m.id === incoming.id)
+        if (idx === -1) return [incoming, ...prev]
+        const next = [...prev]
+        next[idx] = mergeMarketRecord(next[idx], incoming)
+        return next
+      })
+      return incoming
+    }
+
+    if (packet.type === 'bet') {
+      const bet = normalizeBet(packet.payload)
+      if (!bet?.marketId) return null
+      persist(prev => prev.map(m => {
+        if (m.id !== bet.marketId) return m
+        const updated = {
+          ...m,
+          bets: [...(m.bets || []), bet],
+          yesPool: bet.side === 'YES' ? (m.yesPool || 0) + Number(bet.amount || 0) : (m.yesPool || 0),
+          noPool: bet.side === 'NO' ? (m.noPool || 0) + Number(bet.amount || 0) : (m.noPool || 0),
+        }
+        return normalizeMarket(updated)
+      }))
+      return bet
+    }
+
+    if (packet.type === 'resolve') {
+      const resolution = packet.payload?.resolution
+      if (!packet.marketId || !resolution) return null
+      persist(prev => prev.map(m => {
+        if (m.id !== packet.marketId) return m
+        return normalizeMarket({
+          ...m,
+          status: 'resolved',
+          resolution,
+          ...packet,
+          resolutionProof: { signedMessage: packet.signedMessage, signature: packet.signature, publicKey: packet.publicKey, verified: true },
+          shareCode: content,
+        })
+      }))
+      return { marketId: packet.marketId, resolution }
+    }
+
+    return null
+  }, [persist])
+
   const createMarket = useCallback(async ({ question, category, daysOpen }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
 
     const id = 'mkt_' + Date.now()
     const escrow = identity.nametag || identity.directAddress
-
-    const market = {
+    const marketData = {
       id,
-      type: 'MARKET_CREATE',
       question,
       category,
       deadline: Date.now() + daysOpen * 86_400_000,
       createdAt: Date.now(),
       createdBy: escrow,
       escrowAddress: escrow,
+    }
+    const proof = await signSphereRecord('market:create', marketData)
+
+    const market = {
+      id,
+      type: 'MARKET_CREATE',
+      ...marketData,
       yesPool: 0,
       noPool: 0,
       bets: [],
       status: 'open',
+      ...proof,
+      proof: { verified: true, signed: true, publicKey: proof.publicKey },
     }
 
-    persist(prev => [market, ...prev])
-    return market
-  }, [identity, persist])
+    const createdPacket = await emitMarketPacket('create', market, marketData, [escrow])
+
+    persist(prev => [{ ...market, shareCode: createdPacket.shareCode }, ...prev])
+    return { ...market, shareCode: createdPacket.shareCode }
+  }, [identity, persist, signSphereRecord, emitMarketPacket])
 
   const placeBet = useCallback(async ({ market, side, amountHuman }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
@@ -80,7 +225,20 @@ export function useMarkets({ identity, sendPayment, refreshBalance }) {
     const recipient = escrowForMarket(market, identity)
     if (!recipient) throw new Error('Market escrow address missing')
 
+    const betId = 'bet_' + Date.now()
     const memo = `SPHERE_PREDICT:${market.id}:${side}`
+    const who = identity.nametag || identity.directAddress
+    const betData = {
+      betId,
+      marketId: market.id,
+      side,
+      amount: Number(amountHuman),
+      who,
+      recipient,
+      memo,
+      ts: Date.now(),
+    }
+    const proof = await signSphereRecord('market:bet', betData)
 
     const result = await sendPayment({
       recipient,
@@ -89,26 +247,28 @@ export function useMarkets({ identity, sendPayment, refreshBalance }) {
       memo,
     })
 
-    const who = identity.nametag || identity.directAddress
     const betRecord = {
       type: 'MARKET_BET',
-      marketId: market.id,
-      side,
-      amount: Number(amountHuman),
-      who,
+      ...betData,
       txId: result?.transferId || result?.id || 'tx_' + Date.now(),
-      ts: Date.now(),
+      ...proof,
+    }
+
+    const updatedMarket = {
+      ...market,
+      bets: [...(market.bets || []), normalizeBet(betRecord)],
+      yesPool: side === 'YES' ? (market.yesPool || 0) + Number(amountHuman) : (market.yesPool || 0),
+      noPool: side === 'NO' ? (market.noPool || 0) + Number(amountHuman) : (market.noPool || 0),
     }
 
     persist(prev => prev.map(m => {
       if (m.id !== market.id) return m
       return {
-        ...m,
-        bets: [...(m.bets || []), betRecord],
-        yesPool: side === 'YES' ? (m.yesPool || 0) + Number(amountHuman) : (m.yesPool || 0),
-        noPool: side === 'NO' ? (m.noPool || 0) + Number(amountHuman) : (m.noPool || 0),
+        ...updatedMarket,
       }
     }))
+
+    await emitMarketPacket('bet', updatedMarket, betRecord, [market.createdBy, market.escrowAddress])
 
     const pool = side === 'YES' ? (market.yesPool || 0) : (market.noPool || 0)
     const newPool = pool + Number(amountHuman)
@@ -126,13 +286,20 @@ export function useMarkets({ identity, sendPayment, refreshBalance }) {
 
     if (refreshBalance) await refreshBalance()
     return betRecord
-  }, [identity, sendPayment, refreshBalance, persist])
+  }, [identity, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
 
   const resolveMarket = useCallback(async ({ market, resolution }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
+    const resolutionData = {
+      marketId: market.id,
+      resolution,
+      resolvedAt: Date.now(),
+      resolvedBy: identity.nametag || identity.directAddress,
+    }
+    const proof = await signSphereRecord('market:resolve', resolutionData)
 
     persist(prev => prev.map(m =>
-      m.id === market.id ? { ...m, status: 'resolved', resolution } : m
+      m.id === market.id ? { ...m, status: 'resolved', resolution, ...proof, resolutionProof: { ...proof, verified: true } } : m
     ))
 
     setPositions(prev => prev.map(p => {
@@ -162,9 +329,20 @@ export function useMarkets({ identity, sendPayment, refreshBalance }) {
       }
     }
 
+    const resolvedMarket = {
+      ...market,
+      status: 'resolved',
+      resolution,
+      ...proof,
+      resolutionProof: { ...proof, verified: true },
+    }
+
+    const recipients = [market.createdBy, market.escrowAddress, ...(market.bets || []).map(b => b.who)]
+    await emitMarketPacket('resolve', resolvedMarket, resolutionData, recipients)
+
     if (refreshBalance) await refreshBalance()
     return { marketId: market.id, resolution }
-  }, [identity, sendPayment, refreshBalance, persist])
+  }, [identity, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
 
   return {
     markets,
@@ -172,5 +350,6 @@ export function useMarkets({ identity, sendPayment, refreshBalance }) {
     createMarket,
     placeBet,
     resolveMarket,
+    importMarketShare,
   }
 }

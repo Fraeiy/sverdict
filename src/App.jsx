@@ -33,6 +33,13 @@ function shortAddr(addr) {
   return addr.slice(0, 10) + '…'
 }
 
+function proofLabel(proof) {
+  if (!proof) return 'UNVERIFIED'
+  if (proof.verified) return 'SPHERE SIGNED'
+  if (proof.signed) return 'SIGNATURE FAILED'
+  return 'LEGACY'
+}
+
 function ConnectScreen({ wallet }) {
   const [showMethods, setShowMethods] = useState(false)
 
@@ -76,20 +83,16 @@ function ConnectScreen({ wallet }) {
                 Browser extension
               </button>
             )}
-            <button className="btn-ghost" disabled={wallet.isConnecting} onClick={wallet.connectViaPopup}>
-              Wallet popup
-            </button>
             <button className="connect-cancel" onClick={() => setShowMethods(false)}>Back</button>
           </div>
         )}
 
         {wallet.error && <p className="connect-error">{wallet.error}</p>}
         <p className="connect-hint">
-          Based on the{' '}
-          <a href="https://unicity-sphere.github.io/sphere-sdk-connect-example/" target="_blank" rel="noreferrer">
-            Sphere Connect
-          </a>{' '}
-          protocol. Install the Sphere extension or approve access in the popup.
+          New to Sphere and don't have a wallet?{' '}
+          <a href="https://unicity.io/sphere" target="_blank" rel="noreferrer">
+            Create one here
+          </a>.
         </p>
       </div>
     </div>
@@ -117,6 +120,7 @@ function MarketCard({ market, onClick }) {
   const yp = yesPct(market)
   const resClass = market.resolution ? `resolved-${market.resolution.toLowerCase()}` : ''
   const pot = ((market.yesPool || 0) + (market.noPool || 0)).toLocaleString()
+  const proof = market.resolutionProof || market.proof
   return (
     <div className={`mcard ${resClass}`} onClick={() => onClick(market)}>
       <div className="mcard-tag">
@@ -134,6 +138,9 @@ function MarketCard({ market, onClick }) {
       <div className="mcard-footer">
         <span>Pool: <span className="mcard-pot">{pot} UCT</span></span>
         <span>{(market.bets || []).length} bets · {timeLeft(market.deadline)}</span>
+        <span className={`proof-badge proof-${proof?.verified ? 'ok' : proof?.signed ? 'bad' : 'legacy'}`}>
+          {proofLabel(proof)}
+        </span>
         {market.resolution && (
           <span className={`resolution-badge res-${market.resolution.toLowerCase()}`}>RESOLVED {market.resolution}</span>
         )}
@@ -150,6 +157,7 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
 
   const yp = yesPct(market)
   const totalPool = (market.yesPool || 0) + (market.noPool || 0)
+  const proof = market.resolutionProof || market.proof
 
   function calcPayout() {
     const a = parseFloat(amount) || 0
@@ -174,6 +182,13 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
     setBetting(false)
   }
 
+  async function copyShareCode() {
+    if (!market.shareCode) return
+    try {
+      await navigator.clipboard.writeText(market.shareCode)
+    } catch { /* ignore */ }
+  }
+
   const payout = calcPayout()
   const bal = parseFloat(String(balanceHuman).replace(/,/g, '')) || 0
 
@@ -186,6 +201,10 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
           <div className="modal-title">{market.question}</div>
         </div>
         <div className="modal-body">
+          <div className="share-row">
+            <div className="share-code">{market.shareCode ? market.shareCode.slice(0, 42) + '…' : 'No share code yet'}</div>
+            {market.shareCode && <button className="btn-ghost share-copy" onClick={copyShareCode}>Copy share code</button>}
+          </div>
           <div className="stats-row">
             <div className="stat-box">
               <div className="stat-label">TOTAL POT</div>
@@ -199,6 +218,11 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
               <div className="stat-label">NO ODDS</div>
               <div className="stat-val red">{noOdds(market)}</div>
             </div>
+          </div>
+
+          <div className={`market-proof ${proof?.verified ? 'proof-ok' : proof?.signed ? 'proof-bad' : 'proof-legacy'}`}>
+            <span>{proofLabel(proof)}</span>
+            <span>{proof?.publicKey ? shortAddr(proof.publicKey) : 'No signature'}</span>
           </div>
 
           <div className="odds-bar-wrap" style={{ marginBottom: '1.5rem' }}>
@@ -268,10 +292,12 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
 
 export default function App() {
   const wallet = useWalletConnect()
-  const { markets, positions, createMarket, placeBet, resolveMarket } = useMarkets({
+  const { markets, positions, createMarket, placeBet, resolveMarket, importMarketShare } = useMarkets({
     identity: wallet.identity,
     sendPayment: wallet.sendPayment,
     refreshBalance: wallet.refreshBalance,
+    signMessage: wallet.signMessage,
+    sendDM: wallet.sendDM,
   })
 
   const [page, setPage] = useState('markets')
@@ -282,6 +308,7 @@ export default function App() {
   const [newCat, setNewCat] = useState('CRYPTO')
   const [newDays, setNewDays] = useState(7)
   const [creating, setCreating] = useState(false)
+  const [importCode, setImportCode] = useState('')
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type })
@@ -293,6 +320,21 @@ export default function App() {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
+
+  useEffect(() => {
+    if (!wallet.isConnected || !wallet.on) return undefined
+    const unsubscribe = wallet.on('message:dm', async (message) => {
+      const content = message?.content || ''
+      if (!content.startsWith('SPHERE_PREDICT_SYNC:')) return
+      try {
+        await importMarketShare(content)
+        showToast('Market sync received', 'info')
+      } catch {
+        showToast('Ignored invalid market sync', 'error')
+      }
+    })
+    return unsubscribe
+  }, [wallet, importMarketShare, showToast])
 
   if (!wallet.isConnected) {
     return <ConnectScreen wallet={wallet} />
@@ -325,6 +367,19 @@ export default function App() {
       showToast(e.message, 'error')
     }
     setCreating(false)
+  }
+
+  async function handleImportMarket() {
+    if (!importCode.trim()) { showToast('Paste a market share code', 'error'); return }
+    try {
+      const imported = await importMarketShare(importCode.trim())
+      if (!imported) throw new Error('Invalid or unsigned market code')
+      setImportCode('')
+      showToast('Market imported', 'success')
+      setOpenMarket(imported)
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
   }
 
   async function handleResolve(market, resolution) {
@@ -371,6 +426,15 @@ export default function App() {
                 <div className="page-title">Prediction Markets</div>
                 <div className="page-sub">POWERED BY SPHERE SDK · TESTNET · LIVE ODDS</div>
               </div>
+            </div>
+            <div className="import-strip">
+              <input
+                className="field-input import-input"
+                value={importCode}
+                onChange={e => setImportCode(e.target.value)}
+                placeholder="Paste a Sphere market share code"
+              />
+              <button className="btn-primary" onClick={handleImportMarket}>Import market</button>
             </div>
             <div className="filter-row">
               {['all', 'open', 'closed', 'resolved'].map(f => (

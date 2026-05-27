@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import {
   ConnectClient,
   HOST_READY_TYPE,
@@ -52,10 +52,20 @@ export function useWalletConnect() {
   const popupRef = useRef(null)
   const popupMode = useRef(false)
 
-  const dappMeta = {
+  const dappMeta = useMemo(() => ({
     name: 'Sphere Predict',
     description: 'Prediction markets on Sphere testnet',
     url: location.origin,
+  }), [])
+
+  function normalizeIdentity(id) {
+    if (!id) return id
+    const copy = { ...id }
+    const raw = String(copy.directAddress || '')
+    if (raw && !raw.startsWith('DIRECT://') && /^alpha[0-9a-z]+$/i.test(raw)) {
+      copy.directAddress = 'DIRECT://' + raw
+    }
+    return copy
   }
 
   const refreshBalance = useCallback(async () => {
@@ -99,7 +109,7 @@ export function useWalletConnect() {
     clientRef.current = client
     const result = await client.connect()
     sessionStorage.setItem(SESSION_KEY_POPUP, result.sessionId)
-    setState({ ...DISCONNECTED, isConnected: true, identity: result.identity, permissions: result.permissions })
+    setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
     await refreshBalance()
     return client
   }, [dappMeta, refreshBalance])
@@ -130,7 +140,7 @@ export function useWalletConnect() {
       const client = new ConnectClient({ transport, dapp: dappMeta })
       clientRef.current = client
       const result = await client.connect()
-      setState({ ...DISCONNECTED, isConnected: true, identity: result.identity, permissions: result.permissions })
+      setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
       await refreshBalance()
     } catch (err) {
       setState(s => ({ ...s, isConnecting: false, error: err instanceof Error ? err.message : 'Connection failed' }))
@@ -147,7 +157,7 @@ export function useWalletConnect() {
         const client = new ConnectClient({ transport, dapp: dappMeta })
         clientRef.current = client
         const result = await client.connect()
-        setState({ ...DISCONNECTED, isConnected: true, identity: result.identity, permissions: result.permissions })
+        setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
         await refreshBalance()
       } else {
         popupMode.current = true
@@ -228,11 +238,34 @@ export function useWalletConnect() {
     }
   }, [ensureClient, handleRequestError])
 
+  const signMessage = useCallback(async (message) => {
+    if (!message) throw new Error('Missing message to sign')
+    const result = await intent(INTENT_ACTIONS.SIGN_MESSAGE ?? 'sign_message', { message })
+    if (!result?.signature || !result?.publicKey) {
+      throw new Error('Wallet did not return a signature')
+    }
+    return result
+  }, [intent])
+
+  const sendDM = useCallback(async ({ recipient, content }) => {
+    if (!recipient) throw new Error('Missing DM recipient')
+    if (!content) throw new Error('Missing DM content')
+    return await intent(INTENT_ACTIONS.DM ?? 'dm', { recipient, content })
+  }, [intent])
+
   /** Send UCT — opens Sphere wallet for user to sign & confirm. */
   const sendPayment = useCallback(async ({ recipient, amountHuman, coinId = 'UCT', memo }) => {
     let to = recipient
+    if (!to) throw new Error('Missing recipient')
+    // keep nametags and explicit DIRECT:// targets
     if (to && !to.startsWith('@') && !to.startsWith('DIRECT://')) {
-      to = '@' + to.replace(/^@/, '')
+      // if it's an L1 raw address like alpha1..., convert to DIRECT://
+      if (/^alpha[0-9a-z]+$/i.test(to)) {
+        to = 'DIRECT://' + to
+      } else {
+        // otherwise assume it's a nametag and prefix with '@'
+        to = '@' + to.replace(/^@/, '')
+      }
     }
     const params = { to, amount: toRawString(amountHuman), coinId }
     if (memo) params.memo = memo
@@ -282,7 +315,7 @@ export function useWalletConnect() {
       }
     })
     const unsubIdentity = client.on(WALLET_EVENTS.IDENTITY_CHANGED, (data) => {
-      setState(s => ({ ...s, isWalletLocked: false, identity: data }))
+      setState(s => ({ ...s, isWalletLocked: false, identity: normalizeIdentity(data) }))
       refreshBalance()
     })
     return () => { unsubLocked(); unsubIdentity() }
@@ -312,7 +345,7 @@ export function useWalletConnect() {
         clientRef.current = client
         try {
           const result = await client.connect()
-          setState({ ...DISCONNECTED, isConnected: true, identity: result.identity, permissions: result.permissions })
+          setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
           await refreshBalance()
         } catch {
           transportRef.current?.destroy()
@@ -367,7 +400,7 @@ export function useWalletConnect() {
           clientRef.current = client
           const result = await client.connect()
           sessionStorage.setItem(SESSION_KEY_POPUP, result.sessionId)
-          setState({ ...DISCONNECTED, isConnected: true, identity: result.identity, permissions: result.permissions })
+          setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
           await refreshBalance()
         }
         resumePopup()
@@ -397,6 +430,8 @@ export function useWalletConnect() {
     intent,
     sendPayment,
     refreshBalance,
+    signMessage,
+    sendDM,
     on,
     isAutoConnecting,
     extensionInstalled: hasExtension(),

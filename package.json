@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:lan": "vite --host 0.0.0.0 --port 4173 --strictPort",
+    "dev:tunnel": "node scripts/preview-tunnel.mjs",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:lan": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
+    "preview:tunnel": "node scripts/preview-tunnel.mjs"
   },
   "dependencies": {
     "@unicitylabs/sphere-sdk": "^0.7.2",
+    "localtunnel": "^2.0.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
