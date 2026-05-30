@@ -8,6 +8,12 @@ export default defineConfig({
     strictPort: true,
     host: '127.0.0.1',
     allowedHosts: ['.loca.lt'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [
     react(),

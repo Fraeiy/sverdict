@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { buildSignedPayload, verifyPayloadSignature, encodeMarketPacket, decodeMarketPacket } from './lib/marketProtocol'
 
 const STORAGE_KEY = 'sphere-predict-markets-v2'
+const SYNC_CHANNEL_KEY = 'sphere-predict-market-sync-v1'
+const SYNC_STORAGE_KEY = 'sphere-predict-market-sync-v1:last'
+const MARKET_API_BASE = import.meta.env.VITE_MARKET_API_URL || '/api'
 
 const SEED_MARKETS = [
   { id: 'm1', category: 'CRYPTO', status: 'open', question: 'Will ETH surpass BTC in market cap by Q4 2026?', deadline: Date.now() + 90 * 864e5, yesPool: 3200, noPool: 800, bets: [] },
@@ -89,10 +92,95 @@ function escrowForMarket(market, adminDirectAddress) {
 export function useMarkets({ identity, sendPayment, refreshBalance, signMessage, sendDM, adminDirectAddress, isAdmin }) {
   const [markets, setMarkets] = useState(loadMarkets)
   const [positions, setPositions] = useState([])
+  const syncChannelRef = useRef(null)
+  const seenPacketsRef = useRef(new Set())
+  const instanceIdRef = useRef((globalThis.crypto?.randomUUID?.() ?? `sync_${Date.now()}_${Math.random().toString(16).slice(2)}`))
 
   useEffect(() => {
     saveMarkets(markets)
   }, [markets])
+
+  useEffect(() => {
+    let cancelled = false
+    async function syncFromServer() {
+      try {
+        const response = await fetch(`${MARKET_API_BASE}/markets`)
+        if (!response.ok) return
+        const data = await response.json()
+        if (cancelled || !Array.isArray(data.markets)) return
+        setMarkets(data.markets.map(normalizeMarket).filter(Boolean))
+      } catch { /* ignore */ }
+    }
+    syncFromServer()
+    return () => { cancelled = true }
+  }, [])
+
+  const publishMarketShare = useCallback(async (content) => {
+    if (!content) return
+    if (seenPacketsRef.current.has(content)) return
+    seenPacketsRef.current.add(content)
+    const payload = { source: instanceIdRef.current, content, timestamp: Date.now() }
+    try {
+      syncChannelRef.current?.postMessage(payload)
+    } catch { /* ignore */ }
+    try {
+      localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify(payload))
+    } catch { /* ignore */ }
+    try {
+      await fetch(`${MARKET_API_BASE}/market-packets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') {
+      const onStorage = (event) => {
+        if (event.key !== SYNC_STORAGE_KEY || !event.newValue) return
+        try {
+          const payload = JSON.parse(event.newValue)
+          if (!payload || payload.source === instanceIdRef.current || !payload.content) return
+          if (seenPacketsRef.current.has(payload.content)) return
+          seenPacketsRef.current.add(payload.content)
+          importMarketShare(payload.content).catch(() => null)
+        } catch { /* ignore */ }
+      }
+      window.addEventListener('storage', onStorage)
+      return () => window.removeEventListener('storage', onStorage)
+    }
+
+    const channel = new BroadcastChannel(SYNC_CHANNEL_KEY)
+    syncChannelRef.current = channel
+    const handleMessage = (event) => {
+      const payload = event.data
+      if (!payload || payload.source === instanceIdRef.current || !payload.content) return
+      if (seenPacketsRef.current.has(payload.content)) return
+      seenPacketsRef.current.add(payload.content)
+      importMarketShare(payload.content).catch(() => null)
+    }
+    channel.addEventListener('message', handleMessage)
+
+    const onStorage = (event) => {
+      if (event.key !== SYNC_STORAGE_KEY || !event.newValue) return
+      try {
+        const payload = JSON.parse(event.newValue)
+        if (!payload || payload.source === instanceIdRef.current || !payload.content) return
+        if (seenPacketsRef.current.has(payload.content)) return
+        seenPacketsRef.current.add(payload.content)
+        importMarketShare(payload.content).catch(() => null)
+      } catch { /* ignore */ }
+    }
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      channel.removeEventListener('message', handleMessage)
+      channel.close()
+      syncChannelRef.current = null
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [importMarketShare])
 
   const persist = useCallback((updater) => {
     setMarkets(prev => {
@@ -123,8 +211,10 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       await Promise.all(recipients.filter(Boolean).map(recipient => sendDM({ recipient, content: shareCode }).catch(() => null)))
     }
 
+    await publishMarketShare(shareCode)
+
     return { ...packet, ...signed, shareCode }
-  }, [sendDM, signSphereRecord])
+  }, [sendDM, signSphereRecord, publishMarketShare])
 
   const importMarketShare = useCallback(async (content) => {
     const packet = decodeMarketPacket(content)
@@ -184,6 +274,33 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     return null
   }, [persist])
+
+  useEffect(() => {
+    let eventSource
+    try {
+      eventSource = new EventSource(`${MARKET_API_BASE}/events`)
+    } catch {
+      return undefined
+    }
+
+    const handleMarketEvent = (event) => {
+      try {
+        const payload = JSON.parse(event.data)
+        const content = payload?.content
+        if (!content || seenPacketsRef.current.has(content)) return
+        seenPacketsRef.current.add(content)
+        importMarketShare(content).catch(() => null)
+      } catch { /* ignore */ }
+    }
+
+    eventSource.addEventListener('market', handleMarketEvent)
+    eventSource.onerror = () => { /* backend may be offline; keep silent */ }
+
+    return () => {
+      eventSource.removeEventListener('market', handleMarketEvent)
+      eventSource.close()
+    }
+  }, [importMarketShare])
 
   const createMarket = useCallback(async ({ question, category, daysOpen }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
