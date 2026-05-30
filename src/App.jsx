@@ -39,8 +39,9 @@ function timeLeft(dl) {
 }
 function shortAddr(addr) {
   if (!addr) return '—'
-  if (addr.startsWith('@')) return addr
-  return addr.slice(0, 10) + '…'
+  const text = typeof addr === 'string' ? addr : String(addr)
+  if (text.startsWith('@')) return text
+  return text.slice(0, 10) + '…'
 }
 
 function proofLabel(proof) {

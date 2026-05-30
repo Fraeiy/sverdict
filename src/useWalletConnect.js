@@ -42,7 +42,9 @@ function waitForHostReady(timeoutMs = HOST_READY_TIMEOUT) {
 }
 
 function normalizeRecipient(recipient) {
-  let to = recipient
+  let to = typeof recipient === 'string'
+    ? recipient
+    : String(recipient?.directAddress || recipient?.nametag || recipient || '')
   if (!to) throw new Error('Missing recipient')
 
   if (to && !to.startsWith('@') && !to.startsWith('DIRECT://')) {
@@ -193,7 +195,7 @@ export function useWalletConnect() {
         const client = new ConnectClient({ transport, dapp: dappMeta })
         clientRef.current = client
         const result = await client.connect()
-        setState({ ...DISCONNECTED, isConnected: true, identity: result.identity, permissions: result.permissions })
+        setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
         await refreshBalance()
       } else if (hasExtension()) {
         await connectViaExtension()
