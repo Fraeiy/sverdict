@@ -9,7 +9,7 @@ import {
 } from '@unicitylabs/sphere-sdk/connect'
 import { PostMessageTransport, ExtensionTransport } from '@unicitylabs/sphere-sdk/connect/browser'
 import { isInIframe, hasExtension } from './lib/detection'
-import { toHuman } from './lib/amount'
+import { toHuman, toRawString } from './lib/amount'
 
 const WALLET_URL = import.meta.env.VITE_WALLET_URL || 'https://sphere.unicity.network'
 const SESSION_KEY_POPUP = 'sphere-connect-popup-session'
@@ -39,6 +39,21 @@ function waitForHostReady(timeoutMs = HOST_READY_TIMEOUT) {
     }
     window.addEventListener('message', handler)
   })
+}
+
+function normalizeRecipient(recipient) {
+  let to = recipient
+  if (!to) throw new Error('Missing recipient')
+
+  if (to && !to.startsWith('@') && !to.startsWith('DIRECT://')) {
+    if (/^alpha[0-9a-z]+$/i.test(to)) {
+      to = 'DIRECT://' + to
+    } else {
+      to = '@' + to.replace(/^@/, '')
+    }
+  }
+
+  return to
 }
 
 export function useWalletConnect() {
@@ -250,24 +265,13 @@ export function useWalletConnect() {
   const sendDM = useCallback(async ({ recipient, content }) => {
     if (!recipient) throw new Error('Missing DM recipient')
     if (!content) throw new Error('Missing DM content')
-    return await intent(INTENT_ACTIONS.DM ?? 'dm', { recipient, content })
+    return await intent(INTENT_ACTIONS.DM ?? 'dm', { recipient: normalizeRecipient(recipient), content })
   }, [intent])
 
   /** Send UCT — opens Sphere wallet for user to sign & confirm. */
   const sendPayment = useCallback(async ({ recipient, amountHuman, coinId = 'UCT', memo }) => {
-    let to = recipient
-    if (!to) throw new Error('Missing recipient')
-    // keep nametags and explicit DIRECT:// targets
-    if (to && !to.startsWith('@') && !to.startsWith('DIRECT://')) {
-      // if it's an L1 raw address like alpha1..., convert to DIRECT://
-      if (/^alpha[0-9a-z]+$/i.test(to)) {
-        to = 'DIRECT://' + to
-      } else {
-        // otherwise assume it's a nametag and prefix with '@'
-        to = '@' + to.replace(/^@/, '')
-      }
-    }
-    const params = { to, amount: String(amountHuman), coinId }
+    const to = normalizeRecipient(recipient)
+    const params = { to, amount: toRawString(amountHuman), coinId }
     if (memo) params.memo = memo
     const result = await intent(INTENT_ACTIONS.SEND, params)
     await refreshBalance()

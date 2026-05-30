@@ -110,18 +110,44 @@ function ConnectScreen({ wallet }) {
 }
 
 function Ticker({ markets }) {
-  const open = markets.filter(m => m.status === 'open').slice(0, 8)
-  if (!open.length) return <div className="ticker-bar"><span className="tick-dim">No open markets</span></div>
+  const items = markets.length
+    ? markets.map(m => ({
+        id: m.id,
+        question: m.question,
+        status: m.status,
+        category: m.category || 'GENERAL',
+        yes: yesPct(m),
+        pot: ((m.yesPool || 0) + (m.noPool || 0)).toLocaleString(),
+        resolution: m.resolution,
+      }))
+    : []
+
+  if (!items.length) return <div className="ticker-bar"><span className="tick-dim">No markets yet</span></div>
+
+  const renderItem = (m) => (
+    <span key={m.id} className="tick-item">
+      <span className="tick-label">{m.category}</span>
+      <span className="tick-question">{m.question}</span>
+      <span className="tick-yes">Y {m.yes}%</span>
+      <span className="tick-no">POT {m.pot} UCT</span>
+      <span className={`tick-status status-${m.status}`}>
+        {m.status === 'resolved' ? `RESOLVED ${m.resolution || ''}`.trim() : m.status.toUpperCase()}
+      </span>
+    </span>
+  )
+
   return (
     <div className="ticker-bar">
-      {open.map((m, i) => (
-        <span key={m.id} className="tick-item">
-          <span className="tick-label">{m.question.slice(0, 35)}…</span>
-          <span className="tick-yes">Y {yesPct(m)}%</span>
-          <span className="tick-no">N {100 - yesPct(m)}%</span>
-          {i < open.length - 1 && <span className="tick-sep">·</span>}
-        </span>
-      ))}
+      <div className="ticker-viewport" aria-label="Market headlines">
+        <div className="ticker-track">
+          <div className="ticker-group">
+            {items.map(renderItem)}
+          </div>
+          <div className="ticker-group" aria-hidden="true">
+            {items.map(renderItem)}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

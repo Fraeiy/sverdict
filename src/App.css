@@ -50,16 +50,50 @@ header {
 /* ─── TICKER ─────────────────────────────────────────────────────────────── */
 .ticker-bar {
   background: var(--bg2); border-bottom: 1px solid var(--border);
-  padding: 8px 2rem; display: flex; gap: 1.5rem;
-  overflow: hidden; white-space: nowrap;
+  padding: 0 2rem; overflow: hidden;
   font-family: var(--mono); font-size: 11px;
+}
+.ticker-viewport {
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: ticker-scroll 34s linear infinite;
+}
+.ticker-group {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 8px 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 .tick-item { display: flex; align-items: center; gap: 8px; color: var(--text2); }
 .tick-label { color: var(--text3); font-size: 10px; }
+.tick-question { color: var(--text2); }
 .tick-yes { color: var(--green); }
-.tick-no { color: var(--red); }
-.tick-sep { color: var(--border2); }
+.tick-no { color: var(--gold); }
+.tick-status {
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.tick-status.status-open { color: var(--green); }
+.tick-status.status-closed { color: var(--gold); }
+.tick-status.status-resolved { color: var(--text); }
 .tick-dim { color: var(--text3); font-family: var(--mono); font-size: 11px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+}
 
 /* ─── SETUP BANNER ───────────────────────────────────────────────────────── */
 .setup-banner {
