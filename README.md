@@ -1,16 +1,44 @@
-# React + Vite
+# Sphere Predict
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sphere Predict is a lightweight prediction-market prototype built for the Sphere ecosystem. The goal is to make it easy for people to create markets, place bets, and share signed market packets that can be verified by other clients.
 
-Currently, two official plugins are available:
+The current focus is the product experience on the frontend: fast market browsing, wallet-based actions, signed market activity, and a clean interface for testing the core prediction-market flow.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What We Are Building
 
-## React Compiler
+This project is aiming at a simple but useful loop:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Browse open markets and see the current pool state.
+2. Connect a Sphere wallet to sign actions.
+3. Create, share, bet on, and resolve markets with verifiable payloads.
+4. Keep the experience lightweight enough to run as a public demo or a private test app.
 
-## Expanding the ESLint configuration
+## Current Status
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Frontend is active and can run locally.
+- Wallet connection and signed market actions are part of the app flow.
+- The backend is not live right now, so the app should be treated as frontend-first for the moment.
+
+## Running Locally
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Environment
+
+If you need to point the app at a different wallet host, set `VITE_WALLET_URL` in your local environment.
+
+## Tech Stack
+
+- React
+- Vite
+- Sphere wallet SDK
+- ESLint
