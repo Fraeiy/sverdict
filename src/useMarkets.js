@@ -94,7 +94,12 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
   const [positions, setPositions] = useState([])
   const syncChannelRef = useRef(null)
   const seenPacketsRef = useRef(new Set())
-  const instanceIdRef = useRef((globalThis.crypto?.randomUUID?.() ?? `sync_${Date.now()}_${Math.random().toString(16).slice(2)}`))
+  const instanceIdRef = useRef('')
+
+  useEffect(() => {
+    if (instanceIdRef.current) return
+    instanceIdRef.current = globalThis.crypto?.randomUUID?.() ?? `sync_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  }, [])
 
   useEffect(() => {
     saveMarkets(markets)
@@ -134,53 +139,6 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       })
     } catch { /* ignore */ }
   }, [])
-
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') {
-      const onStorage = (event) => {
-        if (event.key !== SYNC_STORAGE_KEY || !event.newValue) return
-        try {
-          const payload = JSON.parse(event.newValue)
-          if (!payload || payload.source === instanceIdRef.current || !payload.content) return
-          if (seenPacketsRef.current.has(payload.content)) return
-          seenPacketsRef.current.add(payload.content)
-          importMarketShare(payload.content).catch(() => null)
-        } catch { /* ignore */ }
-      }
-      window.addEventListener('storage', onStorage)
-      return () => window.removeEventListener('storage', onStorage)
-    }
-
-    const channel = new BroadcastChannel(SYNC_CHANNEL_KEY)
-    syncChannelRef.current = channel
-    const handleMessage = (event) => {
-      const payload = event.data
-      if (!payload || payload.source === instanceIdRef.current || !payload.content) return
-      if (seenPacketsRef.current.has(payload.content)) return
-      seenPacketsRef.current.add(payload.content)
-      importMarketShare(payload.content).catch(() => null)
-    }
-    channel.addEventListener('message', handleMessage)
-
-    const onStorage = (event) => {
-      if (event.key !== SYNC_STORAGE_KEY || !event.newValue) return
-      try {
-        const payload = JSON.parse(event.newValue)
-        if (!payload || payload.source === instanceIdRef.current || !payload.content) return
-        if (seenPacketsRef.current.has(payload.content)) return
-        seenPacketsRef.current.add(payload.content)
-        importMarketShare(payload.content).catch(() => null)
-      } catch { /* ignore */ }
-    }
-    window.addEventListener('storage', onStorage)
-
-    return () => {
-      channel.removeEventListener('message', handleMessage)
-      channel.close()
-      syncChannelRef.current = null
-      window.removeEventListener('storage', onStorage)
-    }
-  }, [importMarketShare])
 
   const persist = useCallback((updater) => {
     setMarkets(prev => {
@@ -274,6 +232,53 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     return null
   }, [persist])
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') {
+      const onStorage = (event) => {
+        if (event.key !== SYNC_STORAGE_KEY || !event.newValue) return
+        try {
+          const payload = JSON.parse(event.newValue)
+          if (!payload || payload.source === instanceIdRef.current || !payload.content) return
+          if (seenPacketsRef.current.has(payload.content)) return
+          seenPacketsRef.current.add(payload.content)
+          importMarketShare(payload.content).catch(() => null)
+        } catch { /* ignore */ }
+      }
+      window.addEventListener('storage', onStorage)
+      return () => window.removeEventListener('storage', onStorage)
+    }
+
+    const channel = new BroadcastChannel(SYNC_CHANNEL_KEY)
+    syncChannelRef.current = channel
+    const handleMessage = (event) => {
+      const payload = event.data
+      if (!payload || payload.source === instanceIdRef.current || !payload.content) return
+      if (seenPacketsRef.current.has(payload.content)) return
+      seenPacketsRef.current.add(payload.content)
+      importMarketShare(payload.content).catch(() => null)
+    }
+    channel.addEventListener('message', handleMessage)
+
+    const onStorage = (event) => {
+      if (event.key !== SYNC_STORAGE_KEY || !event.newValue) return
+      try {
+        const payload = JSON.parse(event.newValue)
+        if (!payload || payload.source === instanceIdRef.current || !payload.content) return
+        if (seenPacketsRef.current.has(payload.content)) return
+        seenPacketsRef.current.add(payload.content)
+        importMarketShare(payload.content).catch(() => null)
+      } catch { /* ignore */ }
+    }
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      channel.removeEventListener('message', handleMessage)
+      channel.close()
+      syncChannelRef.current = null
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [importMarketShare])
 
   useEffect(() => {
     let eventSource

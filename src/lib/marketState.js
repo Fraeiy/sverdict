@@ -1,4 +1,4 @@
-import { verifyPayloadSignature } from './marketProtocol'
+import { verifyPayloadSignature } from './marketProtocol.js'
 
 export const SEED_MARKETS = [
   { id: 'm1', category: 'CRYPTO', status: 'open', question: 'Will ETH surpass BTC in market cap by Q4 2026?', deadline: Date.now() + 90 * 864e5, yesPool: 3200, noPool: 800, bets: [] },

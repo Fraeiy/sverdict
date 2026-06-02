@@ -1,43 +1,8 @@
-import { createServer } from 'node:http'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { applyMarketPacket, cloneSeedMarkets, normalizeMarket } from '../src/lib/marketState.js'
+import { applyMarketPacket, cloneSeedMarkets } from '../src/lib/marketState.js'
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
-
-const PORT = Number(process.env.MARKET_API_PORT || process.env.PORT || 8787)
-const HOST = process.env.HOST || '127.0.0.1'
-const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url))
-const APP_DIR = path.resolve(ROOT_DIR, '..')
-const DIST_DIR = path.join(APP_DIR, 'dist')
-const DATA_DIR = path.join(ROOT_DIR, 'data')
-const DATA_FILE = path.join(DATA_DIR, 'markets.json')
 
 let markets = cloneSeedMarkets()
 const clients = new Set()
-
-async function ensureDataDir() {
-  await mkdir(DATA_DIR, { recursive: true })
-}
-
-async function loadMarkets() {
-  try {
-    if (!existsSync(DATA_FILE)) return
-    const raw = await readFile(DATA_FILE, 'utf8')
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.length) {
-      markets = parsed.map(normalizeMarket).filter(Boolean)
-    }
-  } catch {
-    markets = cloneSeedMarkets()
-  }
-}
-
-async function saveMarkets() {
-  await ensureDataDir()
-  await writeFile(DATA_FILE, JSON.stringify(markets, null, 2), 'utf8')
-}
 
 function setCommonHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -49,37 +14,6 @@ function sendJson(res, statusCode, data) {
   setCommonHeaders(res)
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(data))
-}
-
-function sendFile(res, filePath) {
-  const ext = path.extname(filePath).toLowerCase()
-  const contentType = {
-    '.html': 'text/html; charset=utf-8',
-    '.js': 'application/javascript; charset=utf-8',
-    '.css': 'text/css; charset=utf-8',
-    '.json': 'application/json; charset=utf-8',
-    '.svg': 'image/svg+xml',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.webp': 'image/webp',
-    '.ico': 'image/x-icon',
-    '.map': 'application/json; charset=utf-8',
-  }[ext] || 'application/octet-stream'
-
-  return readFile(filePath).then(buffer => {
-    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable' })
-    res.end(buffer)
-  })
-}
-
-function resolveStaticFile(urlPath) {
-  if (!existsSync(DIST_DIR)) return null
-  const normalized = path.normalize(urlPath).replace(/^([/\\])+/, '')
-  const candidate = path.resolve(DIST_DIR, normalized)
-  if (!candidate.startsWith(DIST_DIR)) return null
-  if (existsSync(candidate) && !candidate.endsWith(path.sep)) return candidate
-  return null
 }
 
 function readBody(req) {
@@ -109,14 +43,11 @@ async function handlePacket(content) {
   const outcome = applyMarketPacket(markets, packet, content)
   if (!outcome.result || !outcome.changed) return { applied: false, packet, outcome }
   markets = outcome.markets
-  await saveMarkets()
   broadcastMarket(content)
   return { applied: true, packet, outcome }
 }
 
-await loadMarkets()
-
-const server = createServer(async (req, res) => {
+export default async function handler(req, res) {
   setCommonHeaders(res)
 
   if (req.method === 'OPTIONS') {
@@ -176,21 +107,5 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  if (req.method === 'GET') {
-    const assetPath = url.pathname === '/' ? path.join(DIST_DIR, 'index.html') : resolveStaticFile(url.pathname.slice(1))
-    if (assetPath) {
-      await sendFile(res, assetPath)
-      return
-    }
-    if (existsSync(path.join(DIST_DIR, 'index.html'))) {
-      await sendFile(res, path.join(DIST_DIR, 'index.html'))
-      return
-    }
-  }
-
   sendJson(res, 404, { ok: false, error: 'Not found' })
-})
-
-server.listen(PORT, HOST, () => {
-  console.log(`Market API listening on http://${HOST}:${PORT}`)
-})
+}

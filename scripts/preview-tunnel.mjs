@@ -4,16 +4,16 @@ import localtunnel from 'localtunnel'
 const port = Number(process.env.PORT || 4173)
 const host = process.env.HOST || '127.0.0.1'
 
-function startViteDev() {
+function startPreviewServer() {
   return spawn(
-    'npm',
-    ['exec', '--', 'vite', '--host', host, '--port', String(port), '--strictPort'],
+    'node',
+    ['scripts/run-backend.mjs', '--host', host, '--port', String(port)],
     { stdio: 'inherit', shell: true }
   )
 }
 
 async function main() {
-  const preview = startViteDev()
+  const preview = startPreviewServer()
   const tunnel = await localtunnel({ port })
 
   console.log('\nTemporary public preview URL: ' + tunnel.url)

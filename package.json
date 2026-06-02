@@ -9,11 +9,12 @@
     "dev:tunnel": "node scripts/preview-tunnel.mjs",
     "backend": "node backend/server.mjs",
     "build": "vite build",
+    "preview": "npm run build && node scripts/run-backend.mjs --host 127.0.0.1 --port 4173",
+    "preview:lan": "npm run build && node scripts/run-backend.mjs --host 0.0.0.0 --port 4173",
+    "preview:tunnel": "npm run build && node scripts/preview-tunnel.mjs",
     "start": "node backend/server.mjs",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "preview:lan": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
-    "preview:tunnel": "node scripts/preview-tunnel.mjs"
+    "preview:legacy": "vite preview"
   },
   "dependencies": {
     "@unicitylabs/sphere-sdk": "^0.7.2",
