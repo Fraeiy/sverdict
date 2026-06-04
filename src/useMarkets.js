@@ -294,6 +294,27 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
     } catch {
       return undefined
     }
+    let pollingTimer = null
+
+    const startPolling = () => {
+      if (pollingTimer) return
+      // Fallback polling every 15s when SSE fails (some proxies/HTTP2 break SSE)
+      pollingTimer = setInterval(async () => {
+        try {
+          const response = await fetch(`${MARKET_API_BASE}/markets`)
+          if (!response.ok) return
+          const data = await response.json()
+          if (!Array.isArray(data.markets)) return
+          setMarkets(data.markets.map(normalizeMarket).filter(Boolean))
+        } catch { /* ignore */ }
+      }, 15000)
+    }
+
+    const stopPolling = () => {
+      if (!pollingTimer) return
+      clearInterval(pollingTimer)
+      pollingTimer = null
+    }
 
     const handleMarketEvent = (event) => {
       try {
@@ -306,11 +327,13 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
     }
 
     eventSource.addEventListener('market', handleMarketEvent)
-    eventSource.onerror = () => { /* backend may be offline; keep silent */ }
+    eventSource.onopen = () => { stopPolling() }
+    eventSource.onerror = () => { /* backend may be offline; start fallback polling */ startPolling() }
 
     return () => {
       eventSource.removeEventListener('market', handleMarketEvent)
-      eventSource.close()
+      try { eventSource.close() } catch {}
+      stopPolling()
     }
   }, [importMarketShare])
 
