@@ -42,12 +42,23 @@ function waitForHostReady(timeoutMs = HOST_READY_TIMEOUT) {
 }
 
 function normalizeRecipient(recipient) {
-  let to = typeof recipient === 'string'
-    ? recipient
-    : String(recipient?.directAddress || recipient?.nametag || recipient || '')
+  // Normalize the recipient into a safe string. Be defensive: recipient
+  // may be undefined, an object, or another non-string value coming from
+  // various code paths. Ensure we always produce a string before calling
+  // string methods like `startsWith`.
+  let toRaw
+  if (typeof recipient === 'string') {
+    toRaw = recipient
+  } else if (recipient && typeof recipient === 'object') {
+    toRaw = recipient.directAddress ?? recipient.nametag ?? recipient
+  } else {
+    toRaw = recipient ?? ''
+  }
+
+  let to = String(toRaw ?? '').trim()
   if (!to) throw new Error('Missing recipient')
 
-  if (to && !to.startsWith('@') && !to.startsWith('DIRECT://')) {
+  if (to && typeof to === 'string' && !to.startsWith('@') && !to.startsWith('DIRECT://')) {
     if (/^alpha[0-9a-z]+$/i.test(to)) {
       to = 'DIRECT://' + to
     } else {
