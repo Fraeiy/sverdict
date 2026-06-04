@@ -4,7 +4,14 @@ import { buildSignedPayload, verifyPayloadSignature, encodeMarketPacket, decodeM
 const STORAGE_KEY = 'sphere-predict-markets-v2'
 const SYNC_CHANNEL_KEY = 'sphere-predict-market-sync-v1'
 const SYNC_STORAGE_KEY = 'sphere-predict-market-sync-v1:last'
-const MARKET_API_BASE = import.meta.env.VITE_MARKET_API_URL || '/api'
+
+function resolveMarketApiBase(value) {
+  const base = String(value || '').trim()
+  if (!base) return '/api'
+  return base.replace(/\/$/, '').replace(/\/api$/, '') + '/api'
+}
+
+const MARKET_API_BASE = resolveMarketApiBase(import.meta.env.VITE_MARKET_API_URL)
 
 const SEED_MARKETS = [
   { id: 'm1', category: 'CRYPTO', status: 'open', question: 'Will ETH surpass BTC in market cap by Q4 2026?', deadline: Date.now() + 90 * 864e5, yesPool: 3200, noPool: 800, bets: [] },

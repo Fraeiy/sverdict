@@ -36,6 +36,19 @@ npm run build
 
 If you need to point the app at a different wallet host, set `VITE_WALLET_URL` in your local environment.
 
+If the frontend is deployed separately from the backend, set `VITE_MARKET_API_URL` to your Fly.io backend URL, for example `https://sphere-predict-backend.fly.dev` or `https://sphere-predict-backend.fly.dev/api`.
+
+## Fly.io Backend
+
+The backend is ready to run on Fly.io as a standalone service. Deploy it from the repo root with:
+
+```bash
+fly launch
+fly deploy
+```
+
+After the Fly app is live, point the frontend at it with `VITE_MARKET_API_URL`.
+
 ## Tech Stack
 
 - React
