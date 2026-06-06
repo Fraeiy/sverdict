@@ -143,6 +143,7 @@ const server = createServer(async (req, res) => {
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'Access-Control-Allow-Origin': '*',
+      'X-Accel-Buffering': 'no',
     })
     res.write(': connected\n\n')
     clients.add(res)
