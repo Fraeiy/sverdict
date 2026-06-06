@@ -15,7 +15,6 @@ export default class ErrorBoundary extends React.Component {
     } catch { /* ignore */ }
     // Also log to console so remote logging systems can pick it up from browser's logs
     // This is intentional: it helps capture runtime errors that otherwise render a blank screen.
-    // eslint-disable-next-line no-console
     console.error('Uncaught app error', error, info)
   }
 

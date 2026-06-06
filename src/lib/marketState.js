@@ -34,8 +34,10 @@ export function normalizeMarket(market) {
   const signature = market.signature || null
   const publicKey = market.publicKey || null
   const verified = Boolean(signedMessage && signature && publicKey && verifyPayloadSignature(signedMessage, signature, publicKey))
+  const status = market.status || (market.resolution ? 'resolved' : (market.deadline && Date.now() > market.deadline ? 'closed' : 'open'))
   return {
     ...market,
+    status,
     bets,
     proof: {
       verified,

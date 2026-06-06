@@ -47,8 +47,10 @@ function normalizeMarket(market) {
   const signature = market.signature || null
   const publicKey = market.publicKey || null
   const verified = Boolean(signedMessage && signature && publicKey && verifyPayloadSignature(signedMessage, signature, publicKey))
+  const status = market.status || (market.resolution ? 'resolved' : (market.deadline && Date.now() > market.deadline ? 'closed' : 'open'))
   return {
     ...market,
+    status,
     bets,
     proof: {
       verified,
@@ -332,7 +334,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     return () => {
       eventSource.removeEventListener('market', handleMarketEvent)
-      try { eventSource.close() } catch {}
+      try { eventSource.close() } catch { /* ignore */ }
       stopPolling()
     }
   }, [importMarketShare])
@@ -351,6 +353,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       createdAt: Date.now(),
       createdBy: escrow,
       escrowAddress: escrow,
+      status: 'open',
     }
     const proof = await signSphereRecord('market:create', marketData)
 

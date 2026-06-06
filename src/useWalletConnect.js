@@ -138,7 +138,7 @@ export function useWalletConnect() {
     const result = await client.connect()
     // Log connection info to help diagnose client-side issues after connect
     // (exposed in browser console). This is intentionally lightweight.
-    try { console.info('wallet connected (popup)', result.identity, result.permissions) } catch {}
+    try { console.info('wallet connected (popup)', result.identity, result.permissions) } catch { /* ignore */ }
     sessionStorage.setItem(SESSION_KEY_POPUP, result.sessionId)
     setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
     await refreshBalance()
@@ -171,7 +171,7 @@ export function useWalletConnect() {
       const client = new ConnectClient({ transport, dapp: dappMeta })
       clientRef.current = client
       const result = await client.connect()
-      try { console.info('wallet connected (extension)', result.identity, result.permissions) } catch {}
+      try { console.info('wallet connected (extension)', result.identity, result.permissions) } catch { /* ignore */ }
       setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
       await refreshBalance()
     } catch (err) {
@@ -189,7 +189,7 @@ export function useWalletConnect() {
         const client = new ConnectClient({ transport, dapp: dappMeta })
         clientRef.current = client
         const result = await client.connect()
-        try { console.info('wallet connected (popup-direct)', result.identity, result.permissions) } catch {}
+        try { console.info('wallet connected (popup-direct)', result.identity, result.permissions) } catch { /* ignore */ }
         setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
         await refreshBalance()
       } else {

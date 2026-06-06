@@ -131,8 +131,8 @@ function Ticker({ markets }) {
       <span className="tick-question">{m.question}</span>
       <span className="tick-yes">Y {m.yes}%</span>
       <span className="tick-no">POT {m.pot} UCT</span>
-      <span className={`tick-status status-${m.status}`}>
-        {m.status === 'resolved' ? `RESOLVED ${m.resolution || ''}`.trim() : m.status.toUpperCase()}
+      <span className={`tick-status status-${m.status || 'open'}`}>
+        {m.status === 'resolved' ? `RESOLVED ${m.resolution || ''}`.trim() : (m.status || 'open').toUpperCase()}
       </span>
     </span>
   )
@@ -161,8 +161,8 @@ function MarketCard({ market, onClick }) {
   return (
     <div className={`mcard ${resClass}`} onClick={() => onClick(market)}>
       <div className="mcard-tag">
-        <span className={`tag-dot ${market.status}`} />
-        {market.category || 'GENERAL'} · {market.status.toUpperCase()}
+        <span className={`tag-dot ${market.status || 'open'}`} />
+        {market.category || 'GENERAL'} · {(market.status || 'open').toUpperCase()}
       </div>
       <div className="mcard-q">{market.question}</div>
       <div className="odds-bar-wrap">
@@ -234,7 +234,7 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
       <div className="modal">
         <button className="modal-close" onClick={onClose}>✕</button>
         <div className="modal-header">
-          <div className="modal-tag">{market.category} · {market.status.toUpperCase()} · {(market.bets || []).length} BETS</div>
+          <div className="modal-tag">{market.category} · {(market.status || 'open').toUpperCase()} · {(market.bets || []).length} BETS</div>
           <div className="modal-title">{market.question}</div>
         </div>
         <div className="modal-body">
@@ -532,7 +532,7 @@ export default function App() {
                       <div className="pos-stake">{p.stake.toLocaleString()} UCT staked</div>
                       <div className="pos-payout">{p.potentialPayout > 0 ? p.potentialPayout.toLocaleString() + ' UCT' : '—'}</div>
                     </div>
-                    <span className={`pos-status pos-${p.status}`}>{p.status.toUpperCase()}</span>
+                    <span className={`pos-status pos-${p.status || 'pending'}`}>{(p.status || 'pending').toUpperCase()}</span>
                   </div>
                 ))}
               </div>
