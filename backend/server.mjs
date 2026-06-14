@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +11,12 @@ const HOST = process.env.HOST || '127.0.0.1'
 const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const APP_DIR = path.resolve(ROOT_DIR, '..')
 const DIST_DIR = path.join(APP_DIR, 'dist')
-const DATA_DIR = path.join(ROOT_DIR, 'data')
+
+// Persistence directory. Override with DATA_DIR env for Fly volumes etc.
+// Default keeps data next to this file for local/dev runs.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(ROOT_DIR, 'data')
 const DATA_FILE = path.join(DATA_DIR, 'markets.json')
 
 let markets = cloneSeedMarkets()
@@ -21,22 +26,45 @@ async function ensureDataDir() {
   await mkdir(DATA_DIR, { recursive: true })
 }
 
+/**
+ * Robust load:
+ * - If the data file exists and parses to a non-empty array, use it.
+ * - Otherwise (first run, or empty/corrupt file), seed from SEED_MARKETS
+ *   and immediately persist so the file exists as a baseline for future loads.
+ */
 async function loadMarkets() {
   try {
-    if (!existsSync(DATA_FILE)) return
+    await ensureDataDir()
+    if (!existsSync(DATA_FILE)) {
+      // First ever run for this persistent store — initialize with seeds and save.
+      markets = cloneSeedMarkets()
+      await saveMarkets()
+      return
+    }
+
     const raw = await readFile(DATA_FILE, 'utf8')
     const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.length) {
+    if (Array.isArray(parsed) && parsed.length > 0) {
       markets = parsed.map(normalizeMarket).filter(Boolean)
+      return
     }
-  } catch {
+
+    // File existed but was empty or invalid — (re)initialize from seeds and save.
     markets = cloneSeedMarkets()
+    await saveMarkets()
+  } catch (err) {
+    console.warn('Failed to load markets from disk, falling back to seeds:', err?.message || err)
+    markets = cloneSeedMarkets()
+    try { await saveMarkets() } catch {}
   }
 }
 
 async function saveMarkets() {
   await ensureDataDir()
-  await writeFile(DATA_FILE, JSON.stringify(markets, null, 2), 'utf8')
+  const tmp = DATA_FILE + '.tmp'
+  // Atomic write: write to .tmp then rename to avoid partial/corrupt files on crash.
+  await writeFile(tmp, JSON.stringify(markets, null, 2), 'utf8')
+  await rename(tmp, DATA_FILE)
 }
 
 function setCommonHeaders(res) {

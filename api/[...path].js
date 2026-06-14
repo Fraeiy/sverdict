@@ -1,6 +1,18 @@
 import { applyMarketPacket, cloneSeedMarkets } from '../src/lib/marketState.js'
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
 
+/**
+ * WARNING: This is a stateless / serverless-friendly re-implementation of the API handlers.
+ * It seeds fresh on every cold start and has NO disk persistence (no load/save, no DATA_DIR).
+ * Created markets will disappear on function/instance restarts or deploys.
+ *
+ * The primary deployment (Docker + Fly via backend/server.mjs) has real persistence
+ * via the volume + improved load/save logic.
+ *
+ * If you deploy this api/ handler (e.g. on Vercel), you will need an external store
+ * (Upstash Redis, Fly Postgres, etc.) for real multi-user durability.
+ */
+
 let markets = cloneSeedMarkets()
 const clients = new Set()
 

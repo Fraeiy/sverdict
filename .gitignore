@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Backend persistent data (markets.json etc.). Never commit user/test data.
+# We keep the directory via .gitkeep so it exists after clone.
+backend/data/*
+!backend/data/.gitkeep

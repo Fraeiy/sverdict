@@ -7,6 +7,14 @@ primary_region = "ams"
 [env]
   HOST = "0.0.0.0"
   PORT = "8787"
+  # Point the backend at the mounted persistent volume for market data.
+  # Without this (or a volume), created markets are lost on machine restarts
+  # because Fly containers are ephemeral by default.
+  DATA_DIR = "/data"
+
+[mounts]
+  source = "sphere_predict_data"
+  destination = "/data"
 
 [[services]]
   protocol = "tcp"

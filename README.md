@@ -47,6 +47,25 @@ fly launch
 fly deploy
 ```
 
+**Important: Persistent storage for markets**
+
+Market creates/resolves are persisted to disk (`markets.json`). By default Fly containers are ephemeral and machines can be stopped (see `auto_stop_machines` in `fly.toml`).
+
+1. Create a volume (one time):
+   ```bash
+   fly volumes create sphere_predict_data --size 1 --region ams
+   ```
+   (Use your primary_region.)
+
+2. The `fly.toml` already declares the mount and sets `DATA_DIR=/data` so the server writes to the volume.
+
+3. Redeploy after volume creation:
+   ```bash
+   fly deploy
+   ```
+
+Without a volume, created markets will disappear on the next machine start/restart (this was the root cause of "new markets gone after refresh").
+
 After the Fly app is live, either point a separate frontend at it with `VITE_MARKET_API_URL`, or use the same Fly app as the public URL for the full app.
 
 ## Tech Stack
