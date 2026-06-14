@@ -41,7 +41,7 @@ function waitForHostReady(timeoutMs = HOST_READY_TIMEOUT) {
   })
 }
 
-function normalizeRecipient(recipient) {
+export function normalizeRecipient(recipient) {
   // Normalize the recipient into a safe string. Be defensive: recipient
   // may be undefined, an object, or another non-string value coming from
   // various code paths. Ensure we always produce a string before calling
