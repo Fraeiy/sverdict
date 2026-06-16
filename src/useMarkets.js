@@ -530,12 +530,12 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     // Direct Sphere-native stake: the payment itself is the bet.
     // Prepopulate the send with recipient and memo so the user only approves in their Sphere wallet.
-    const memo = `market:${market.id}:outcome:${side}`;
+    const paymentMemo = `market:${market.id}:outcome:${side}`;
     const result = await sendPayment({
       recipient: "@sphere-predict",
       amountHuman,
       coinId: 'UCT',
-      memo,
+      memo: paymentMemo,
     });
 
     const betRecord = {
