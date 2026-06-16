@@ -158,8 +158,9 @@ function MarketCard({ market, onClick }) {
   const resClass = market.resolution ? `resolved-${market.resolution.toLowerCase()}` : ''
   const pot = ((market.yesPool || 0) + (market.noPool || 0)).toLocaleString()
   const proof = market.resolutionProof || market.proof
+  const isOpen = market.status === 'open'
   return (
-    <div className={`mcard ${resClass}`} onClick={() => onClick(market)}>
+    <div className={`mcard ${resClass}`} onClick={() => isOpen && onClick(market)} style={!isOpen ? { cursor: 'default', opacity: 0.75 } : undefined}>
       <div className="mcard-tag">
         <span className={`tag-dot ${market.status || 'open'}`} />
         {market.category || 'GENERAL'} · {(market.status || 'open').toUpperCase()}
@@ -208,13 +209,13 @@ function BetModal({ market, balanceHuman, internalBalance = 0, onBet, onClose })
     const a = parseFloat(amount)
     if (!side || !a || a <= 0) return
     setBetting(true)
-    setMsg('Approve transfer in your Sphere wallet…')
+    setMsg('Placing bet (internal ledger)...')
     try {
       await onBet({ market, side, amountHuman: a })
       setMsg('✓ Bet confirmed!')
       setTimeout(onClose, 1200)
     } catch (e) {
-      setMsg(e.message || 'Transfer failed')
+      setMsg(e.message || 'Bet failed')
     }
     setBetting(false)
   }
@@ -651,7 +652,7 @@ export default function App() {
 
       {openMarket && (
         <BetModal
-          market={openMarket}
+          market={markets.find(m => m.id === openMarket.id) || openMarket}
           balanceHuman={wallet.balanceHuman}
           internalBalance={internalBalance}
           onBet={async args => {
