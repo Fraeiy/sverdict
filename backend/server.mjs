@@ -250,6 +250,11 @@ async function handlePacket(content) {
     const bet = packet.payload || {}
     const who = bet.who || packet.who
     const betAmount = bet.amount || 0
+    const m = markets.find(mm => mm.id === packet.marketId)
+    if (m && m.status !== 'open') {
+      console.warn('Bet rejected: market not open')
+      return { applied: false, packet, outcome: { ...outcome, error: 'market_not_open' } }
+    }
     if (who && betAmount > 0) {
       if (!debitBalance(who, betAmount)) {
         // Not enough internal balance - do not apply the bet to markets

@@ -508,6 +508,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
   const placeBet = useCallback(async ({ market, side, amountHuman }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
+    if (market.status !== 'open') throw new Error('Market has ended - betting is closed')
 
     const recipient = escrowForMarket(market, adminDirectAddress)
     if (!recipient) throw new Error('Market escrow address missing')
@@ -527,12 +528,20 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
     }
     const proof = await signSphereRecord('market:bet', betData)
 
-    // Bet is now against internal ledger balance (credited on deposit).
-    // No per-bet on-chain send from user wallet. We still emit the signed packet for verifiability.
+    // Direct Sphere-native stake: the payment itself is the bet.
+    // Prepopulate the send with recipient and memo so the user only approves in their Sphere wallet.
+    const memo = `market:${market.id}:outcome:${side}`;
+    const result = await sendPayment({
+      recipient: "@sphere-predict",
+      amountHuman,
+      coinId: 'UCT',
+      memo,
+    });
+
     const betRecord = {
       type: 'MARKET_BET',
       ...betData,
-      txId: 'ledger_' + Date.now(), // internal ledger tx
+      txId: result?.transferId || result?.id || 'tx_' + Date.now(),
       ...proof,
     }
 
