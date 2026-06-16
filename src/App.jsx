@@ -186,7 +186,7 @@ function MarketCard({ market, onClick }) {
   )
 }
 
-function BetModal({ market, balanceHuman, onBet, onClose }) {
+function BetModal({ market, balanceHuman, internalBalance = 0, onBet, onClose }) {
   const [side, setSide] = useState(null)
   const [amount, setAmount] = useState('')
   const [betting, setBetting] = useState(false)
@@ -653,6 +653,7 @@ export default function App() {
         <BetModal
           market={openMarket}
           balanceHuman={wallet.balanceHuman}
+          internalBalance={internalBalance}
           onBet={async args => {
             await placeBet(args)
             showToast('Bet placed against internal market balance!')
