@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { buildSignedPayload, verifyPayloadSignature, encodeMarketPacket, decodeMarketPacket } from './lib/marketProtocol'
+import { normalizeRecipient } from './useWalletConnect'
 
 const STORAGE_KEY = 'sphere-predict-markets-v2'
 const SYNC_CHANNEL_KEY = 'sphere-predict-market-sync-v1'
@@ -101,6 +102,8 @@ function escrowForMarket(market, adminDirectAddress) {
 export function useMarkets({ identity, sendPayment, refreshBalance, signMessage, sendDM, adminDirectAddress, isAdmin }) {
   const [markets, setMarkets] = useState(loadMarkets)
   const [positions, setPositions] = useState([])
+  const [treasuryAddress, setTreasuryAddress] = useState('')
+  const [internalBalance, setInternalBalance] = useState(0)
   const syncChannelRef = useRef(null)
   const seenPacketsRef = useRef(new Set())
   const instanceIdRef = useRef('')
@@ -114,6 +117,35 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
     saveMarkets(markets)
   }, [markets])
 
+  // Sync positions from markets on any market change
+  useEffect(() => {
+    const newPositions = []
+    for (const market of markets) {
+      if (market.bets) {
+        for (const bet of market.bets) {
+          if (bet.who === identity?.nametag || bet.who === identity?.directAddress) {
+            const pool = bet.side === 'YES' ? (market.yesPool || 0) : (market.noPool || 0)
+            const totalPool = (market.yesPool || 0) + (market.noPool || 0)
+            const potentialPayout = pool > 0 ? Math.round((bet.amount / pool) * totalPool) : 0
+            let status = 'pending'
+            if (market.status === 'resolved') {
+              status = bet.side === market.resolution ? 'won' : 'lost'
+            }
+            newPositions.push({
+              marketId: market.id,
+              question: market.question,
+              side: bet.side,
+              stake: bet.amount,
+              potentialPayout,
+              status,
+            })
+          }
+        }
+      }
+    }
+    setPositions(newPositions)
+  }, [markets, identity])
+
   useEffect(() => {
     let cancelled = false
     async function syncFromServer() {
@@ -123,11 +155,32 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
         const data = await response.json()
         if (cancelled || !Array.isArray(data.markets)) return
         setMarkets(data.markets.map(normalizeMarket).filter(Boolean))
+        if (data.treasuryAddress) setTreasuryAddress(data.treasuryAddress)
       } catch { /* ignore */ }
     }
     syncFromServer()
     return () => { cancelled = true }
   }, [])
+
+  const fetchBalance = useCallback(async (addr) => {
+    if (!addr) return 0
+    try {
+      const response = await fetch(`${MARKET_API_BASE}/balance?address=${encodeURIComponent(addr)}`)
+      if (!response.ok) return 0
+      const data = await response.json()
+      const bal = Number(data.balance || 0)
+      setInternalBalance(bal)
+      return bal
+    } catch {
+      return 0
+    }
+  }, [])
+
+  useEffect(() => {
+    if (identity?.directAddress) {
+      fetchBalance(identity.directAddress)
+    }
+  }, [identity?.directAddress, fetchBalance])
 
   const publishMarketShare = useCallback(async (content) => {
     if (!content) return
@@ -182,6 +235,62 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     return { ...packet, ...signed, shareCode }
   }, [sendDM, signSphereRecord, publishMarketShare])
+
+  const deposit = useCallback(async (amountHuman) => {
+    if (!treasuryAddress) throw new Error('Treasury address not available from server')
+    if (!sendPayment) throw new Error('Wallet not connected')
+    const amt = Number(amountHuman)
+    if (!amt || amt <= 0) throw new Error('Invalid deposit amount')
+    // User signs a real UCT transfer to the treasury (one on-chain tx for deposits)
+    const result = await sendPayment({
+      recipient: treasuryAddress,
+      amountHuman: amt,
+      coinId: 'UCT',
+      memo: 'SPHERE_PREDICT_DEPOSIT'
+    })
+    // Emit signed deposit packet so backend credits the internal ledger balance
+    const depositData = {
+      amount: amt,
+      who: identity?.directAddress || identity?.nametag,
+      ts: Date.now(),
+      txId: result?.transferId || result?.id
+    }
+    const proof = await signSphereRecord('deposit', depositData)
+    const depositPacket = {
+      protocol: 'sphere-predict-v1',
+      type: 'deposit',
+      payload: depositData,
+      ...proof,
+      createdAt: Date.now()
+    }
+    const shareCode = encodeMarketPacket(depositPacket)
+    await publishMarketShare(shareCode)
+    await fetchBalance(identity?.directAddress)
+    return { ...depositData, ...proof }
+  }, [treasuryAddress, sendPayment, identity, signSphereRecord, publishMarketShare, fetchBalance])
+
+  const withdraw = useCallback(async (amountHuman) => {
+    const amt = Number(amountHuman)
+    if (!amt || amt <= 0) throw new Error('Invalid withdraw amount')
+    const who = identity?.directAddress || identity?.nametag
+    const withdrawData = {
+      amount: amt,
+      who,
+      ts: Date.now()
+    }
+    const proof = await signSphereRecord('withdraw', withdrawData)
+    const withdrawPacket = {
+      protocol: 'sphere-predict-v1',
+      type: 'withdraw',
+      payload: withdrawData,
+      ...proof,
+      createdAt: Date.now()
+    }
+    const shareCode = encodeMarketPacket(withdrawPacket)
+    await publishMarketShare(shareCode)
+    await fetchBalance(who)
+    return { ...withdrawData, ...proof }
+  }, [identity, signSphereRecord, publishMarketShare, fetchBalance])
 
   const importMarketShare = useCallback(async (content) => {
     const packet = decodeMarketPacket(content)
@@ -291,17 +400,16 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
   useEffect(() => {
     let eventSource
-    try {
-      eventSource = new EventSource(`${MARKET_API_BASE}/events`)
-    } catch {
-      return undefined
-    }
     let pollingTimer = null
+    let isPolling = false
+    let cancelled = false
 
     const startPolling = () => {
-      if (pollingTimer) return
+      if (isPolling || pollingTimer) return
+      isPolling = true
       // Fallback polling every 15s when SSE fails (some proxies/HTTP2 break SSE)
       pollingTimer = setInterval(async () => {
+        if (cancelled) return
         try {
           const response = await fetch(`${MARKET_API_BASE}/markets`)
           if (!response.ok) return
@@ -316,6 +424,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       if (!pollingTimer) return
       clearInterval(pollingTimer)
       pollingTimer = null
+      isPolling = false
     }
 
     const handleMarketEvent = (event) => {
@@ -328,13 +437,35 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       } catch { /* ignore */ }
     }
 
-    eventSource.addEventListener('market', handleMarketEvent)
-    eventSource.onopen = () => { stopPolling() }
-    eventSource.onerror = () => { /* backend may be offline; start fallback polling */ startPolling() }
+    const initEventSource = () => {
+      try {
+        eventSource = new EventSource(`${MARKET_API_BASE}/events`)
+      } catch {
+        startPolling()
+        return
+      }
+
+      eventSource.addEventListener('market', handleMarketEvent)
+      eventSource.onopen = () => { stopPolling() }
+      eventSource.onerror = () => {
+        // Don't start polling immediately - let EventSource attempt reconnect
+        // Only start polling if we're not already polling and connection seems dead
+        setTimeout(() => {
+          if (!cancelled && eventSource?.readyState === EventSource.CLOSED) {
+            startPolling()
+          }
+        }, 5000)
+      }
+    }
+
+    initEventSource()
 
     return () => {
-      eventSource.removeEventListener('market', handleMarketEvent)
-      try { eventSource.close() } catch { /* ignore */ }
+      cancelled = true
+      if (eventSource) {
+        eventSource.removeEventListener('market', handleMarketEvent)
+        try { eventSource.close() } catch { /* ignore */ }
+      }
       stopPolling()
     }
   }, [importMarketShare])
@@ -396,17 +527,12 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
     }
     const proof = await signSphereRecord('market:bet', betData)
 
-    const result = await sendPayment({
-      recipient,
-      amountHuman,
-      coinId: 'UCT',
-      memo,
-    })
-
+    // Bet is now against internal ledger balance (credited on deposit).
+    // No per-bet on-chain send from user wallet. We still emit the signed packet for verifiability.
     const betRecord = {
       type: 'MARKET_BET',
       ...betData,
-      txId: result?.transferId || result?.id || 'tx_' + Date.now(),
+      txId: 'ledger_' + Date.now(), // internal ledger tx
       ...proof,
     }
 
@@ -424,7 +550,17 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       }
     }))
 
+    // optimistic UI update for internal balance (server will confirm on packet)
+    if (identity?.directAddress) {
+      setInternalBalance(prev => Math.max(0, prev - Number(amountHuman)))
+    }
+
     await emitMarketPacket('bet', updatedMarket, betRecord, [market.createdBy, market.escrowAddress])
+
+    // refresh from server (server debited the internal ledger when applying the packet)
+    if (identity?.directAddress) {
+      fetchBalance(identity.directAddress).catch(() => {})
+    }
 
     const pool = side === 'YES' ? (market.yesPool || 0) : (market.noPool || 0)
     const newPool = pool + Number(amountHuman)
@@ -442,7 +578,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     if (refreshBalance) await refreshBalance()
     return betRecord
-  }, [identity, adminDirectAddress, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
+  }, [identity, adminDirectAddress, refreshBalance, persist, signSphereRecord, emitMarketPacket])
 
   const resolveMarket = useCallback(async ({ market, resolution }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
@@ -464,28 +600,8 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       return { ...p, status: p.side === resolution ? 'won' : 'lost' }
     }))
 
-    const winners = (market.bets || []).filter(b => b.side === resolution)
-    const totalWinnerStake = winners.reduce((s, b) => s + b.amount, 0)
-    const loserPool = resolution === 'YES' ? (market.noPool || 0) : (market.yesPool || 0)
-
-    for (const winner of winners) {
-      if (!winner.who || totalWinnerStake <= 0) continue
-      const share = winner.amount / totalWinnerStake
-      const payout = winner.amount + Math.floor(loserPool * share)
-      if (payout > 0) {
-        try {
-          await sendPayment({
-            recipient: winner.who,
-            amountHuman: payout,
-            coinId: 'UCT',
-            memo: `SPHERE_PREDICT_PAYOUT:${market.id}`,
-          })
-        } catch (err) {
-          console.warn('Payout failed for', winner.who, err)
-        }
-      }
-    }
-
+    // Payouts are now handled internally by the backend ledger when the resolve packet is applied.
+    // We only sign + emit the resolution for verifiability. Winners get credited in their internal balance.
     const resolvedMarket = {
       ...market,
       status: 'resolved',
@@ -504,9 +620,14 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
   return {
     markets,
     positions,
+    treasuryAddress,
+    internalBalance,
     createMarket,
     placeBet,
     resolveMarket,
     importMarketShare,
+    deposit,
+    withdraw,
+    fetchBalance,
   }
 }

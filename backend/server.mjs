@@ -5,6 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyMarketPacket, cloneSeedMarkets, normalizeMarket } from '../src/lib/marketState.js'
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
+import { Sphere } from '@unicitylabs/sphere-sdk'
+import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 
 const PORT = Number(process.env.MARKET_API_PORT || process.env.PORT || 8787)
 const HOST = process.env.HOST || '127.0.0.1'
@@ -18,8 +20,13 @@ const DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(ROOT_DIR, 'data')
 const DATA_FILE = path.join(DATA_DIR, 'markets.json')
+const BALANCES_FILE = path.join(DATA_DIR, 'balances.json')
 
 let markets = cloneSeedMarkets()
+let userBalances = {}
+let treasurySphere = null
+let TREASURY_ADDRESS = ''
+
 const clients = new Set()
 
 async function ensureDataDir() {
@@ -65,6 +72,69 @@ async function saveMarkets() {
   // Atomic write: write to .tmp then rename to avoid partial/corrupt files on crash.
   await writeFile(tmp, JSON.stringify(markets, null, 2), 'utf8')
   await rename(tmp, DATA_FILE)
+}
+
+async function loadBalances() {
+  try {
+    await ensureDataDir()
+    if (!existsSync(BALANCES_FILE)) {
+      userBalances = {}
+      return
+    }
+    const raw = await readFile(BALANCES_FILE, 'utf8')
+    userBalances = JSON.parse(raw) || {}
+  } catch {
+    userBalances = {}
+  }
+}
+
+async function saveBalances() {
+  await ensureDataDir()
+  const tmp = BALANCES_FILE + '.tmp'
+  await writeFile(tmp, JSON.stringify(userBalances, null, 2), 'utf8')
+  await rename(tmp, BALANCES_FILE)
+}
+
+function getBalance(address) {
+  if (!address) return 0
+  return userBalances[address] || 0
+}
+
+function creditBalance(address, amount) {
+  if (!address) return
+  const current = getBalance(address)
+  userBalances[address] = current + Number(amount || 0)
+  saveBalances().catch(console.warn)
+}
+
+function debitBalance(address, amount) {
+  if (!address) return false
+  const current = getBalance(address)
+  const needed = Number(amount || 0)
+  if (current < needed) return false
+  userBalances[address] = current - needed
+  saveBalances().catch(console.warn)
+  return true
+}
+
+async function initTreasury() {
+  try {
+    const providers = createNodeProviders({ network: 'testnet' })
+    const mnemonic = process.env.TREASURY_MNEMONIC
+    const initOptions = mnemonic
+      ? { ...providers, mnemonic }
+      : { ...providers, autoGenerate: true }
+    if (!mnemonic) {
+      console.warn('⚠️  No TREASURY_MNEMONIC env var set. Using auto-generated treasury wallet for this run. Set TREASURY_MNEMONIC for persistent treasury.')
+    }
+    const { sphere } = await Sphere.init(initOptions)
+    treasurySphere = sphere
+    TREASURY_ADDRESS = sphere.identity?.directAddress || 'unknown'
+    console.log('Treasury wallet ready. Address for deposits:', TREASURY_ADDRESS)
+  } catch (err) {
+    console.error('Failed to initialize treasury wallet:', err)
+    TREASURY_ADDRESS = 'treasury-init-failed'
+  }
 }
 
 function setCommonHeaders(res) {
@@ -134,8 +204,83 @@ function broadcastMarket(content) {
 
 async function handlePacket(content) {
   const packet = decodeMarketPacket(content)
+  if (!packet) return { applied: false, packet: null, outcome: null }
+
+  // Handle deposit: credit internal balance (user sent UCT on-chain to treasury)
+  if (packet.type === 'deposit') {
+    const who = packet.who || packet.payload?.who
+    const amount = packet.payload?.amount || packet.amount
+    if (who && amount) {
+      creditBalance(who, amount)
+    }
+    broadcastMarket(content)
+    return { applied: true, packet, outcome: { result: { type: 'deposit' }, changed: true } }
+  }
+
+  // Handle withdraw request: debit internal + send from treasury (server-controlled)
+  if (packet.type === 'withdraw') {
+    const who = packet.who || packet.payload?.who
+    const amount = packet.payload?.amount || packet.amount
+    if (who && amount && debitBalance(who, amount)) {
+      if (treasurySphere) {
+        try {
+          await treasurySphere.payments.send({
+            recipient: who,
+            amount: String(amount),
+            coinId: 'UCT',
+            memo: `SPHERE_PREDICT_WITHDRAW:${who}`
+          })
+        } catch (e) {
+          console.warn('Treasury withdraw send failed, re-crediting balance:', e?.message || e)
+          creditBalance(who, amount) // rollback on failure
+          return { applied: false, packet, outcome: { error: 'withdraw_failed' } }
+        }
+      }
+      broadcastMarket(content)
+      return { applied: true, packet, outcome: { result: { type: 'withdraw' }, changed: true } }
+    }
+    return { applied: false, packet, outcome: { error: 'insufficient_balance' } }
+  }
+
   const outcome = applyMarketPacket(markets, packet, content)
   if (!outcome.result || !outcome.changed) return { applied: false, packet, outcome }
+
+  // Internal ledger integration for bets (no on-chain per-bet transfer)
+  if (packet.type === 'bet') {
+    const bet = packet.payload || {}
+    const who = bet.who || packet.who
+    const betAmount = bet.amount || 0
+    if (who && betAmount > 0) {
+      if (!debitBalance(who, betAmount)) {
+        // Not enough internal balance - do not apply the bet to markets
+        console.warn(`Bet rejected for ${who}: insufficient internal balance`)
+        return { applied: false, packet, outcome: { ...outcome, error: 'insufficient_internal_balance' } }
+      }
+    }
+  }
+
+  // On resolve, credit winner balances internally from the ledger (instead of admin doing many sends)
+  if (packet.type === 'resolve') {
+    const res = packet.payload || {}
+    const resolution = res.resolution
+    const marketId = packet.marketId
+    // Find the market (after apply it is in markets)
+    const m = markets.find(mm => mm.id === marketId)
+    if (m && resolution) {
+      const winners = (m.bets || []).filter(b => b.side === resolution)
+      const totalWinnerStake = winners.reduce((s, b) => s + (b.amount || 0), 0)
+      const loserPool = resolution === 'YES' ? (m.noPool || 0) : (m.yesPool || 0)
+      for (const winner of winners) {
+        if (!winner.who || totalWinnerStake <= 0) continue
+        const share = (winner.amount || 0) / totalWinnerStake
+        const payout = (winner.amount || 0) + Math.floor(loserPool * share)
+        if (payout > 0) {
+          creditBalance(winner.who, payout)
+        }
+      }
+    }
+  }
+
   markets = outcome.markets
   await saveMarkets()
   broadcastMarket(content)
@@ -143,6 +288,8 @@ async function handlePacket(content) {
 }
 
 await loadMarkets()
+await loadBalances()
+await initTreasury()
 
 const server = createServer(async (req, res) => {
   setCommonHeaders(res)
@@ -161,7 +308,13 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/markets') {
-    sendJson(res, 200, { markets })
+    sendJson(res, 200, { markets, treasuryAddress: TREASURY_ADDRESS })
+    return
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/balance') {
+    const addr = url.searchParams.get('address')
+    sendJson(res, 200, { balance: getBalance(addr) })
     return
   }
 

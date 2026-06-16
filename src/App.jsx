@@ -272,7 +272,7 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
 
           {market.status === 'open' ? (
             <div className="bet-section">
-              <div className="bet-title">PLACE YOUR BET · Balance: {balanceHuman} UCT</div>
+              <div className="bet-title">PLACE YOUR BET · Internal Balance: {internalBalance} UCT (deposit to market first)</div>
               <div className="bet-choices">
                 <button className={`bet-choice${side === 'YES' ? ' selected-yes' : ''}`} onClick={() => setSide('YES')}>
                   <div className="choice-label choice-yes">YES</div>
@@ -297,7 +297,7 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
               {msg && <div className="bet-msg">{msg}</div>}
               <button
                 className="btn-bet"
-                disabled={!side || !amount || betting || (parseFloat(amount) > bal)}
+                disabled={!side || !amount || betting || (parseFloat(amount) > internalBalance)}
                 onClick={handleBet}
               >
                 {betting ? 'Waiting for wallet…' : side ? `BET ${amount || '?'} UCT ON ${side}` : 'SELECT A SIDE TO BET'}
@@ -330,7 +330,7 @@ function BetModal({ market, balanceHuman, onBet, onClose }) {
 export default function App() {
   const wallet = useWalletConnect()
   const adminConnected = isAdminIdentity(wallet.identity)
-  const { markets, positions, createMarket, placeBet, resolveMarket, importMarketShare } = useMarkets({
+  const { markets, positions, treasuryAddress, internalBalance, createMarket, placeBet, resolveMarket, importMarketShare, deposit, withdraw, fetchBalance } = useMarkets({
     identity: wallet.identity,
     sendPayment: wallet.sendPayment,
     refreshBalance: wallet.refreshBalance,
@@ -349,6 +349,8 @@ export default function App() {
   const [newDays, setNewDays] = useState(7)
   const [creating, setCreating] = useState(false)
   const [importCode, setImportCode] = useState('')
+  const [depositAmt, setDepositAmt] = useState('25')
+  const [withdrawAmt, setWithdrawAmt] = useState('')
   const activePage = adminConnected || page !== 'admin' ? page : 'markets'
 
   const showToast = useCallback((msg, type = 'success') => {
@@ -423,6 +425,32 @@ export default function App() {
     }
   }
 
+  async function handleDeposit() {
+    const amt = parseFloat(depositAmt)
+    if (!amt || amt <= 0) { showToast('Enter valid deposit amount', 'error'); return }
+    try {
+      showToast('Approve deposit transfer in your Sphere wallet…', 'info')
+      await deposit(amt)
+      showToast(`Deposited ${amt} UCT to market (internal balance credited)`, 'success')
+      setDepositAmt('25')
+    } catch (e) {
+      showToast(e.message || 'Deposit failed', 'error')
+    }
+  }
+
+  async function handleWithdraw() {
+    const amt = parseFloat(withdrawAmt || internalBalance)
+    if (!amt || amt <= 0) { showToast('Enter valid withdraw amount', 'error'); return }
+    if (amt > internalBalance) { showToast('Insufficient internal balance', 'error'); return }
+    try {
+      await withdraw(amt)
+      showToast(`Withdraw request for ${amt} UCT submitted (treasury will send to your wallet)`, 'success')
+      setWithdrawAmt('')
+    } catch (e) {
+      showToast(e.message || 'Withdraw failed', 'error')
+    }
+  }
+
   async function handleResolve(market, resolution) {
     if (!confirm(`Resolve as ${resolution}? Winners will be paid via your wallet.`)) return
     try {
@@ -467,6 +495,10 @@ export default function App() {
                 <div className="page-title">Prediction Markets</div>
                 <div className="page-sub">POWERED BY SPHERE SDK · TESTNET · LIVE ODDS</div>
               </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right', fontSize: '12px' }}>
+                <div>Treasury: {treasuryAddress ? treasuryAddress.slice(0, 20) + '…' : 'loading…'}</div>
+                <div>Internal Balance: <strong>{internalBalance}</strong> UCT</div>
+              </div>
             </div>
             <div className="import-strip">
               <input
@@ -476,6 +508,24 @@ export default function App() {
                 placeholder="Paste a Sphere market share code"
               />
               <button className="btn-primary" onClick={handleImportMarket}>Import market</button>
+            </div>
+            <div className="import-strip" style={{ marginTop: '8px' }}>
+              <input
+                className="field-input import-input"
+                type="number"
+                value={depositAmt}
+                onChange={e => setDepositAmt(e.target.value)}
+                placeholder="Deposit amount (UCT)"
+              />
+              <button className="btn-primary" onClick={handleDeposit}>Deposit to Market (sign once)</button>
+              <input
+                className="field-input import-input"
+                type="number"
+                value={withdrawAmt}
+                onChange={e => setWithdrawAmt(e.target.value)}
+                placeholder="Withdraw amount (leave empty = all)"
+              />
+              <button className="btn-ghost" onClick={handleWithdraw}>Withdraw to Wallet</button>
             </div>
             <div className="filter-row">
               {['all', 'open', 'closed', 'resolved'].map(f => (
@@ -504,7 +554,11 @@ export default function App() {
             </div>
             <div className="portfolio-summary">
               <div className="port-stat">
-                <div className="port-stat-label">WALLET BALANCE</div>
+                <div className="port-stat-label">INTERNAL MARKET BALANCE</div>
+                <div className="port-stat-val">{internalBalance} UCT</div>
+              </div>
+              <div className="port-stat">
+                <div className="port-stat-label">WALLET BALANCE (for deposits)</div>
                 <div className="port-stat-val">{wallet.balanceHuman} UCT</div>
               </div>
               <div className="port-stat">
@@ -601,7 +655,7 @@ export default function App() {
           balanceHuman={wallet.balanceHuman}
           onBet={async args => {
             await placeBet(args)
-            showToast('Bet placed on-chain!')
+            showToast('Bet placed against internal market balance!')
           }}
           onClose={() => setOpenMarket(null)}
         />
