@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "node scripts/dev-full.mjs",
     "dev:lan": "vite --host 0.0.0.0 --port 4173 --strictPort",
     "dev:tunnel": "node scripts/preview-tunnel.mjs",
     "backend": "node backend/server.mjs",
+    "prod:check": "node scripts/prod-check.mjs",
+    "supabase:push": "npx supabase db push",
+    "supabase:deploy": "npx supabase functions deploy platform --no-verify-jwt",
     "build": "vite build",
+    "build:prod": "npm run prod:check && vite build",
     "preview": "npm run build && node scripts/run-backend.mjs --host 127.0.0.1 --port 4173",
     "preview:lan": "npm run build && node scripts/run-backend.mjs --host 0.0.0.0 --port 4173",
     "preview:tunnel": "npm run build && node scripts/preview-tunnel.mjs",
@@ -17,6 +22,7 @@
     "preview:legacy": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
     "@unicitylabs/sphere-sdk": "^0.7.2",
     "localtunnel": "^2.0.2",
     "react": "^19.2.6",
@@ -25,6 +31,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/node": "^26.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
@@ -32,6 +40,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^6.0.3",
     "vite": "^8.0.12",
     "vite-plugin-node-polyfills": "^0.27.0"
   }

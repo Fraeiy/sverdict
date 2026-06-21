@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { buildSignedPayload, verifyPayloadSignature, encodeMarketPacket, decodeMarketPacket } from './lib/marketProtocol'
-import { normalizeRecipient } from './useWalletConnect'
 
 const STORAGE_KEY = 'sphere-predict-markets-v2'
 const SYNC_CHANNEL_KEY = 'sphere-predict-market-sync-v1'
@@ -513,6 +512,9 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
     const recipient = escrowForMarket(market, adminDirectAddress)
     if (!recipient) throw new Error('Market escrow address missing')
 
+    const amt = Number(amountHuman)
+    if (!amt || amt <= 0) throw new Error('Invalid bet amount')
+
     const betId = 'bet_' + Date.now()
     const memo = `SPHERE_PREDICT:${market.id}:${side}`
     const who = identity.nametag || identity.directAddress
@@ -520,28 +522,24 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
       betId,
       marketId: market.id,
       side,
-      amount: Number(amountHuman),
+      amount: amt,
       who,
       recipient,
       memo,
       ts: Date.now(),
     }
+    const bal = await fetchBalance(identity?.directAddress)
+    if (amt > bal) {
+      throw new Error('Insufficient internal balance. Deposit UCT to the market treasury first.')
+    }
+
     const proof = await signSphereRecord('market:bet', betData)
 
-    // Direct Sphere-native stake: the payment itself is the bet.
-    // Prepopulate the send with recipient and memo so the user only approves in their Sphere wallet.
-    const paymentMemo = `market:${market.id}:outcome:${side}`;
-    const result = await sendPayment({
-      recipient: "@sphere-predict",
-      amountHuman,
-      coinId: 'UCT',
-      memo: paymentMemo,
-    });
-
+    // Internal ledger bet: sign once in the wallet, server debits internal balance on packet apply.
     const betRecord = {
       type: 'MARKET_BET',
       ...betData,
-      txId: result?.transferId || result?.id || 'tx_' + Date.now(),
+      txId: betId,
       ...proof,
     }
 
@@ -587,7 +585,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     if (refreshBalance) await refreshBalance()
     return betRecord
-  }, [identity, adminDirectAddress, refreshBalance, persist, signSphereRecord, emitMarketPacket])
+  }, [identity, adminDirectAddress, refreshBalance, fetchBalance, persist, signSphereRecord, emitMarketPacket])
 
   const resolveMarket = useCallback(async ({ market, resolution }) => {
     if (!identity) throw new Error('Connect your Sphere wallet first')
@@ -624,7 +622,7 @@ export function useMarkets({ identity, sendPayment, refreshBalance, signMessage,
 
     if (refreshBalance) await refreshBalance()
     return { marketId: market.id, resolution }
-  }, [identity, isAdmin, sendPayment, refreshBalance, persist, signSphereRecord, emitMarketPacket])
+  }, [identity, isAdmin, refreshBalance, persist, signSphereRecord, emitMarketPacket])
 
   return {
     markets,

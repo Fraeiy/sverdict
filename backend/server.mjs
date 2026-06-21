@@ -7,6 +7,9 @@ import { applyMarketPacket, cloneSeedMarkets, normalizeMarket } from '../src/lib
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
 import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
+import { initPlatform } from './platform/engine.mjs'
+import { handlePlatformApi } from './platform/routes.mjs'
+import { setTreasury } from './platform/store.mjs'
 
 const PORT = Number(process.env.MARKET_API_PORT || process.env.PORT || 8787)
 const HOST = process.env.HOST || '127.0.0.1'
@@ -295,6 +298,8 @@ async function handlePacket(content) {
 await loadMarkets()
 await loadBalances()
 await initTreasury()
+await initPlatform()
+if (TREASURY_ADDRESS) await setTreasury(TREASURY_ADDRESS)
 
 const server = createServer(async (req, res) => {
   setCommonHeaders(res)
@@ -306,6 +311,21 @@ const server = createServer(async (req, res) => {
   }
 
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+
+  // Platform API (Polymarket-style internal ledger)
+  const platformPaths = [
+    '/api/health', '/api/treasury', '/api/auth', '/api/portfolio',
+    '/api/notifications', '/api/deposits', '/api/withdrawals', '/api/trades',
+    '/api/markets', '/api/admin',
+  ]
+  if (platformPaths.some(p => url.pathname === p || url.pathname.startsWith(p + '/'))) {
+    let body = {}
+    if (req.method === 'POST') {
+      try { body = await readBody(req) } catch { body = {} }
+    }
+    await handlePlatformApi(req, res, url.pathname, body)
+    return
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/health') {
     sendJson(res, 200, { ok: true })

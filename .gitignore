@@ -27,3 +27,13 @@ dist-ssr
 # We keep the directory via .gitkeep so it exists after clone.
 backend/data/*
 !backend/data/.gitkeep
+backend/platform/data/*
+!backend/platform/data/.gitkeep
+
+# Supabase CLI temp
+supabase/.temp/
+
+# Local wallet data
+sphere-data/
+.env
+.env.production.local

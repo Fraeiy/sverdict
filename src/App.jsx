@@ -187,7 +187,7 @@ function MarketCard({ market, onClick }) {
   )
 }
 
-function BetModal({ market, balanceHuman, internalBalance = 0, onBet, onClose }) {
+function BetModal({ market, internalBalance = 0, onBet, onClose }) {
   const [side, setSide] = useState(null)
   const [amount, setAmount] = useState('')
   const [betting, setBetting] = useState(false)
@@ -228,7 +228,6 @@ function BetModal({ market, balanceHuman, internalBalance = 0, onBet, onClose })
   }
 
   const payout = calcPayout()
-  const bal = parseFloat(String(balanceHuman).replace(/,/g, '')) || 0
 
   return (
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -301,7 +300,7 @@ function BetModal({ market, balanceHuman, internalBalance = 0, onBet, onClose })
                 disabled={!side || !amount || betting || (parseFloat(amount) > internalBalance)}
                 onClick={handleBet}
               >
-                {betting ? 'Waiting for wallet…' : side ? `BET ${amount || '?'} UCT ON ${side}` : 'SELECT A SIDE TO BET'}
+                {betting ? 'Signing bet…' : side ? `BET ${amount || '?'} UCT ON ${side}` : 'SELECT A SIDE TO BET'}
               </button>
             </div>
           ) : market.status === 'resolved' ? (
@@ -331,7 +330,7 @@ function BetModal({ market, balanceHuman, internalBalance = 0, onBet, onClose })
 export default function App() {
   const wallet = useWalletConnect()
   const adminConnected = isAdminIdentity(wallet.identity)
-  const { markets, positions, treasuryAddress, internalBalance, createMarket, placeBet, resolveMarket, importMarketShare, deposit, withdraw, fetchBalance } = useMarkets({
+  const { markets, positions, treasuryAddress, internalBalance, createMarket, placeBet, resolveMarket, importMarketShare, deposit, withdraw } = useMarkets({
     identity: wallet.identity,
     sendPayment: wallet.sendPayment,
     refreshBalance: wallet.refreshBalance,
@@ -653,7 +652,6 @@ export default function App() {
       {openMarket && (
         <BetModal
           market={markets.find(m => m.id === openMarket.id) || openMarket}
-          balanceHuman={wallet.balanceHuman}
           internalBalance={internalBalance}
           onBet={async args => {
             await placeBet(args)

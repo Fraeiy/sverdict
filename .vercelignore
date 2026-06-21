@@ -1,0 +1,8 @@
+api
+backend
+scripts
+supabase/.temp
+node_modules
+sphere-data
+*.md
+!PRODUCTION.md
