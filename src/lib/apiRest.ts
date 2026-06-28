@@ -1,4 +1,4 @@
-import type { Market, Notification, Portfolio, User } from './types'
+import type { Claim, Market, Portfolio, User } from './types'
 
 const API_BASE = import.meta.env.VITE_MARKET_API_URL
   ? String(import.meta.env.VITE_MARKET_API_URL).replace(/\/$/, '').replace(/\/api$/, '') + '/api'
@@ -56,46 +56,33 @@ export async function fetchPortfolio(auth: AuthHeaders) {
   return request<Portfolio>('/portfolio', { headers: authHeaders(auth) })
 }
 
-export async function fetchNotifications(auth: AuthHeaders) {
-  return request<{ notifications: Notification[] }>('/notifications', { headers: authHeaders(auth) })
+export async function fetchClaims(auth: AuthHeaders) {
+  return request<{ claims: Claim[] }>('/claims', { headers: authHeaders(auth) })
 }
 
-export async function markNotificationRead(auth: AuthHeaders, id: string) {
-  return request(`/notifications/${id}/read`, { method: 'POST', headers: authHeaders(auth) })
-}
-
-export async function markAllNotificationsRead(auth: AuthHeaders) {
-  return request('/notifications/read-all', { method: 'POST', headers: authHeaders(auth) })
-}
-
-export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
-  return request<{ deposit: unknown; portfolio: Portfolio }>('/deposits', {
+export async function claimReward(auth: AuthHeaders, claimId: string) {
+  return request<{ claim: Claim; amount: number }>(`/claims/${claimId}/claim`, {
     method: 'POST',
     headers: authHeaders(auth),
-    body: JSON.stringify({ amount, txReference }),
+    body: '{}',
   })
 }
 
-export async function withdraw(auth: AuthHeaders, amount: number) {
-  return request<{ withdrawal: unknown; portfolio: Portfolio }>('/withdrawals', {
-    method: 'POST',
-    headers: authHeaders(auth),
-    body: JSON.stringify({ amount }),
-  })
-}
-
-export async function placeTrade(
+export async function placeStake(
   auth: AuthHeaders,
-  payload: { marketId: string; side: 'YES' | 'NO'; amount: number; signature?: string; signedMessage?: string },
+  payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number; txReference?: string; memo?: string },
 ) {
-  return request<{ trade: unknown; portfolio: Portfolio }>('/trades', {
+  return request<{ portfolio: Portfolio }>('/stakes', {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify(payload),
   })
 }
 
-export async function adminCreateMarket(auth: AuthHeaders, payload: { question: string; category: string; daysOpen: number }) {
+export async function adminCreateMarket(
+  auth: AuthHeaders,
+  payload: { question: string; description?: string; resolutionCriteria?: string; category: string; daysOpen: number },
+) {
   return request<{ market: Market }>('/admin/markets', {
     method: 'POST',
     headers: authHeaders(auth),
@@ -119,18 +106,6 @@ export async function adminResolveMarket(auth: AuthHeaders, marketId: string, re
   })
 }
 
-export async function adminListDeposits(auth: AuthHeaders) {
-  return request<{ deposits: unknown[] }>('/admin/deposits', { headers: authHeaders(auth) })
-}
-
-export async function adminListWithdrawals(auth: AuthHeaders) {
-  return request<{ withdrawals: unknown[] }>('/admin/withdrawals', { headers: authHeaders(auth) })
-}
-
 export function subscribeToMarkets(_onUpdate: () => void) {
-  return () => {}
-}
-
-export function subscribeToNotifications(_userId: string, _onInsert: (n: Notification) => void) {
   return () => {}
 }

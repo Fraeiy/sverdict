@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Market, Notification, Portfolio, User } from './types'
+import type { Claim, Market, Portfolio, User } from './types'
 import type { AuthHeaders } from './apiRest'
 
 function walletHeaders(auth?: AuthHeaders): Record<string, string> {
@@ -26,7 +26,18 @@ async function invoke<T>(route: string, init?: { method?: string; payload?: unkn
 function enrichMarket(m: Market): Market {
   const total = Number(m.yes_pool || 0) + Number(m.no_pool || 0)
   const yes_price = total ? Number(m.yes_pool || 0) / total : 0.5
-  return { ...m, yes_price, no_price: 1 - yes_price }
+  const yes_probability = yes_price
+  const no_probability = 1 - yes_price
+  return {
+    ...m,
+    title: m.title || m.question,
+    resolution_date: m.resolution_date || m.deadline,
+    resolved_outcome: m.resolved_outcome || m.resolution,
+    yes_price,
+    no_price: 1 - yes_price,
+    yes_probability,
+    no_probability,
+  }
 }
 
 export async function fetchTreasury() {
@@ -76,34 +87,25 @@ export async function fetchPortfolio(auth: AuthHeaders) {
   return invoke<Portfolio>('/portfolio', { auth })
 }
 
-export async function fetchNotifications(auth: AuthHeaders) {
-  return invoke<{ notifications: Notification[] }>('/notifications', { auth })
+export async function fetchClaims(auth: AuthHeaders) {
+  return invoke<{ claims: Claim[] }>('/claims', { auth })
 }
 
-export async function markNotificationRead(auth: AuthHeaders, id: string) {
-  return invoke(`/notifications/${id}/read`, { auth })
+export async function claimReward(auth: AuthHeaders, claimId: string) {
+  return invoke<{ claim: Claim; amount: number }>(`/claims/${claimId}/claim`, { auth })
 }
 
-export async function markAllNotificationsRead(auth: AuthHeaders) {
-  return invoke('/notifications/read-all', { auth })
-}
-
-export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
-  return invoke<{ portfolio: Portfolio }>('/deposits', { auth, payload: { amount, txReference } })
-}
-
-export async function withdraw(auth: AuthHeaders, amount: number) {
-  return invoke<{ portfolio: Portfolio }>('/withdrawals', { auth, payload: { amount } })
-}
-
-export async function placeTrade(
+export async function placeStake(
   auth: AuthHeaders,
-  payload: { marketId: string; side: 'YES' | 'NO'; amount: number; signature?: string; signedMessage?: string },
+  payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number; txReference?: string; memo?: string },
 ) {
-  return invoke<{ portfolio: Portfolio }>('/trades', { auth, payload })
+  return invoke<{ portfolio: Portfolio }>('/stakes', { auth, payload })
 }
 
-export async function adminCreateMarket(auth: AuthHeaders, payload: { question: string; category: string; daysOpen: number }) {
+export async function adminCreateMarket(
+  auth: AuthHeaders,
+  payload: { question: string; description?: string; resolutionCriteria?: string; category: string; daysOpen: number },
+) {
   return invoke<{ market: Market }>('/admin/markets', { auth, payload })
 }
 
@@ -115,14 +117,6 @@ export async function adminResolveMarket(auth: AuthHeaders, marketId: string, re
   return invoke(`/admin/markets/resolve/${marketId}`, { auth, payload: { resolution } })
 }
 
-export async function adminListDeposits(auth: AuthHeaders) {
-  return invoke<{ deposits: unknown[] }>('/admin/deposits', { auth })
-}
-
-export async function adminListWithdrawals(auth: AuthHeaders) {
-  return invoke<{ withdrawals: unknown[] }>('/admin/withdrawals', { auth })
-}
-
 export function subscribeToMarkets(onUpdate: () => void) {
   if (!supabase) return () => {}
   const channel = supabase
@@ -132,13 +126,3 @@ export function subscribeToMarkets(onUpdate: () => void) {
   return () => { supabase?.removeChannel(channel) }
 }
 
-export function subscribeToNotifications(userId: string, onInsert: (n: Notification) => void) {
-  if (!supabase) return () => {}
-  const channel = supabase
-    .channel(`notifications-${userId}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, payload => {
-      onInsert(payload.new as Notification)
-    })
-    .subscribe()
-  return () => { supabase?.removeChannel(channel) }
-}

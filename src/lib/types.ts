@@ -1,6 +1,9 @@
 export type MarketStatus = 'open' | 'closed' | 'resolved'
-export type Side = 'YES' | 'NO'
-export type NotificationType = 'deposit' | 'withdrawal' | 'market' | 'trade'
+export type Outcome = 'YES' | 'NO'
+export type Side = Outcome
+export type PositionStatus = 'open' | 'settled' | 'claimable'
+export type ClaimStatus = 'pending' | 'claimed'
+export type NotificationType = 'stake' | 'claim' | 'market' | 'trade' | 'deposit' | 'withdrawal'
 
 export interface User {
   id: string
@@ -13,17 +16,24 @@ export interface User {
 
 export interface Market {
   id: string
+  /** Display title */
   question: string
+  title?: string
   description?: string | null
+  resolution_criteria?: string | null
   category: string
   status: MarketStatus
   deadline: string
+  resolution_date?: string
   yes_pool: number
   no_pool: number
   volume: number
   trending_score: number
-  resolution?: Side | null
+  resolution?: Outcome | null
+  resolved_outcome?: Outcome | null
   resolved_at?: string | null
+  yes_probability?: number
+  no_probability?: number
   yes_price?: number
   no_price?: number
   created_at: string
@@ -33,28 +43,44 @@ export interface Position {
   id: string
   user_id: string
   market_id: string
-  side: Side
+  side: Outcome
+  outcome?: Outcome
   quantity: number
+  shares?: number
+  stake_amount?: number
   avg_entry: number
   cost_basis: number
-  status: 'open' | 'settled'
+  status: PositionStatus | 'settled'
   payout?: number | null
   pnl?: number | null
   current_value?: number
   unrealized_pnl?: number
+  potential_payout?: number
   market?: Market
   created_at: string
   settled_at?: string | null
 }
 
+export interface Claim {
+  id: string
+  user_id: string
+  market_id: string
+  position_id?: string | null
+  amount: number
+  status: ClaimStatus
+  tx_reference?: string | null
+  created_at: string
+  claimed_at?: string | null
+  market?: Market
+}
+
 export interface Portfolio {
-  available_balance: number
-  total_portfolio_value: number
-  unrealized_pnl: number
-  realized_pnl: number
-  total_pnl: number
   open_positions: Position[]
   resolved_positions: Position[]
+  pending_claims: Claim[]
+  total_staked: number
+  total_claimable: number
+  estimated_value: number
 }
 
 export interface Notification {
