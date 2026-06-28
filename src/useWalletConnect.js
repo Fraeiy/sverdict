@@ -6,6 +6,7 @@ import {
   WALLET_EVENTS,
   RPC_METHODS,
   INTENT_ACTIONS,
+  SPHERE_NETWORKS,
 } from '@unicitylabs/sphere-sdk/connect'
 import { PostMessageTransport, ExtensionTransport } from '@unicitylabs/sphere-sdk/connect/browser'
 import { isInIframe, hasExtension } from './lib/detection'
@@ -86,6 +87,14 @@ export function useWalletConnect() {
     url: location.origin,
   }), [])
 
+  const makeClient = useCallback((transport, extra = {}) =>
+    new ConnectClient({
+      transport,
+      dapp: dappMeta,
+      network: SPHERE_NETWORKS.testnet2,
+      ...extra,
+    }), [dappMeta])
+
   function normalizeIdentity(id) {
     if (!id) return id
     const copy = { ...id }
@@ -133,7 +142,7 @@ export function useWalletConnect() {
     await waitForHostReady()
 
     const resumeSessionId = sessionStorage.getItem(SESSION_KEY_POPUP) ?? undefined
-    const client = new ConnectClient({ transport, dapp: dappMeta, resumeSessionId })
+    const client = makeClient(transport, { resumeSessionId })
     clientRef.current = client
     const result = await client.connect()
     // Log connection info to help diagnose client-side issues after connect
@@ -143,7 +152,7 @@ export function useWalletConnect() {
     setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
     await refreshBalance()
     return client
-  }, [dappMeta, refreshBalance])
+  }, [dappMeta, makeClient, refreshBalance])
 
   const ensureClient = useCallback(async () => {
     if (clientRef.current && !popupMode.current) return clientRef.current
@@ -168,7 +177,7 @@ export function useWalletConnect() {
       popupMode.current = false
       const transport = ExtensionTransport.forClient()
       transportRef.current = transport
-      const client = new ConnectClient({ transport, dapp: dappMeta })
+      const client = makeClient(transport)
       clientRef.current = client
       const result = await client.connect()
       try { console.info('wallet connected (extension)', result.identity, result.permissions) } catch { /* ignore */ }
@@ -177,7 +186,7 @@ export function useWalletConnect() {
     } catch (err) {
       setState(s => ({ ...s, isConnecting: false, error: err instanceof Error ? err.message : 'Connection failed' }))
     }
-  }, [dappMeta, refreshBalance])
+  }, [dappMeta, makeClient, refreshBalance])
 
   const connectViaPopup = useCallback(async () => {
     setState(s => ({ ...s, isConnecting: true, error: null }))
@@ -186,7 +195,7 @@ export function useWalletConnect() {
         popupMode.current = false
         const transport = PostMessageTransport.forClient()
         transportRef.current = transport
-        const client = new ConnectClient({ transport, dapp: dappMeta })
+        const client = makeClient(transport)
         clientRef.current = client
         const result = await client.connect()
         try { console.info('wallet connected (popup-direct)', result.identity, result.permissions) } catch { /* ignore */ }
@@ -199,7 +208,7 @@ export function useWalletConnect() {
     } catch (err) {
       setState(s => ({ ...s, isConnecting: false, error: err instanceof Error ? err.message : 'Connection failed' }))
     }
-  }, [dappMeta, openPopupAndConnect, refreshBalance])
+  }, [dappMeta, makeClient, openPopupAndConnect, refreshBalance])
 
   const connect = useCallback(async () => {
     setState(s => ({ ...s, isConnecting: true, error: null }))
@@ -208,7 +217,7 @@ export function useWalletConnect() {
         popupMode.current = false
         const transport = PostMessageTransport.forClient()
         transportRef.current = transport
-        const client = new ConnectClient({ transport, dapp: dappMeta })
+        const client = makeClient(transport)
         clientRef.current = client
         const result = await client.connect()
         setState({ ...DISCONNECTED, isConnected: true, identity: normalizeIdentity(result.identity), permissions: result.permissions })
@@ -221,7 +230,7 @@ export function useWalletConnect() {
     } catch (err) {
       setState(s => ({ ...s, isConnecting: false, error: err instanceof Error ? err.message : 'Connection failed' }))
     }
-  }, [dappMeta, connectViaExtension, connectViaPopup, refreshBalance])
+  }, [dappMeta, makeClient, connectViaExtension, connectViaPopup, refreshBalance])
 
   const disconnect = useCallback(async () => {
     try {
@@ -368,7 +377,7 @@ export function useWalletConnect() {
         popupMode.current = false
         const transport = PostMessageTransport.forClient()
         transportRef.current = transport
-        const client = new ConnectClient({ transport, dapp: dappMeta, silent: true })
+        const client = makeClient(transport, { silent: true })
         clientRef.current = client
         try {
           const result = await client.connect()
@@ -389,7 +398,7 @@ export function useWalletConnect() {
         popupMode.current = false
         const transport = ExtensionTransport.forClient()
         transportRef.current = transport
-        const client = new ConnectClient({ transport, dapp: dappMeta, silent: true })
+        const client = makeClient(transport, { silent: true })
         clientRef.current = client
         try {
           const result = await client.connect()
@@ -423,7 +432,7 @@ export function useWalletConnect() {
           })
           transportRef.current = transport
           await waitForHostReady(5000)
-          const client = new ConnectClient({ transport, dapp: dappMeta, resumeSessionId: savedSession, silent: true })
+          const client = makeClient(transport, { resumeSessionId: savedSession, silent: true })
           clientRef.current = client
           const result = await client.connect()
           sessionStorage.setItem(SESSION_KEY_POPUP, result.sessionId)
@@ -444,7 +453,7 @@ export function useWalletConnect() {
         setIsAutoConnecting(false)
       }
     }
-  }, [dappMeta, refreshBalance])
+  }, [dappMeta, makeClient, refreshBalance])
 
   return {
     ...state,
