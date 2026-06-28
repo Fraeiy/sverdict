@@ -11,6 +11,7 @@ import {
 import { PostMessageTransport, ExtensionTransport } from '@unicitylabs/sphere-sdk/connect/browser'
 import { isInIframe, hasExtension } from './lib/detection'
 import { toHuman } from './lib/amount'
+import { isUctAsset, resolveCoinId } from './lib/sphereCoins'
 
 const WALLET_URL = import.meta.env.VITE_WALLET_URL || 'https://sphere.unicity.network'
 const SESSION_KEY_POPUP = 'sphere-connect-popup-session'
@@ -111,7 +112,7 @@ export function useWalletConnect() {
     try {
       const assets = await client.query(RPC_METHODS.GET_ASSETS)
       const list = Array.isArray(assets) ? assets : assets?.assets ?? []
-      const uct = list.find(a => a.coinId === 'UCT' || a.symbol === 'UCT')
+      const uct = list.find(isUctAsset)
       const raw = uct?.totalAmount ?? uct?.balance ?? 0
       setBalanceHuman(toHuman(raw))
     } catch (err) {
@@ -303,7 +304,7 @@ export function useWalletConnect() {
    */
   const sendPayment = useCallback(async ({ recipient, amountHuman, coinId = 'UCT', memo }) => {
     const to = normalizeRecipient(recipient)
-    const params = { to, amount: String(amountHuman), coinId }
+    const params = { to, amount: String(amountHuman), coinId: resolveCoinId(coinId) }
     if (memo) params.memo = memo
     const result = await intent(INTENT_ACTIONS.SEND, params)
     await refreshBalance()

@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { getTreasuryAddressFallback } from '../lib/config'
+import { resolveCoinId } from '../lib/sphereCoins'
 
 type WalletLike = {
   sendPayment?: (p: { recipient: string; amountHuman: number; coinId?: string; memo?: string }) => Promise<unknown>
@@ -18,7 +19,7 @@ export function useSpherePayment(wallet: WalletLike, treasuryAddress?: string) {
     const result = await wallet.sendPayment({
       recipient: treasury,
       amountHuman: n,
-      coinId: 'UCT',
+      coinId: resolveCoinId('UCT'),
       memo: 'SPHERE_PREDICT_DEPOSIT',
     })
 
