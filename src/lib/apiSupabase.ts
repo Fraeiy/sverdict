@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Market, Portfolio, User } from './types'
+import type { HistoryEntry, Market, Portfolio, User } from './types'
 import type { AuthHeaders } from './apiRest'
 
 function walletHeaders(auth?: AuthHeaders): Record<string, string> {
@@ -85,6 +85,10 @@ export async function fetchMarket(id: string) {
 
 export async function fetchPortfolio(auth: AuthHeaders) {
   return invoke<Portfolio>('/portfolio', { auth })
+}
+
+export async function fetchHistory(auth: AuthHeaders) {
+  return invoke<{ history: HistoryEntry[] }>('/history', { auth })
 }
 
 export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {

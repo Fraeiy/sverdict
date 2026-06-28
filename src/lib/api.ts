@@ -13,6 +13,7 @@ export const authenticate = impl.authenticate
 export const fetchMarkets = impl.fetchMarkets
 export const fetchMarket = impl.fetchMarket
 export const fetchPortfolio = impl.fetchPortfolio
+export const fetchHistory = impl.fetchHistory
 export const deposit = impl.deposit
 export const withdraw = impl.withdraw
 export const placeTrade = impl.placeTrade

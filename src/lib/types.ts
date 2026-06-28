@@ -59,6 +59,19 @@ export interface Position {
   settled_at?: string | null
 }
 
+export type HistoryType = 'deposit' | 'withdrawal' | 'trade' | 'settlement'
+
+export interface HistoryEntry {
+  id: string
+  type: HistoryType
+  amount: number
+  direction: 'in' | 'out'
+  label: string
+  detail?: string | null
+  market_id?: string | null
+  created_at: string
+}
+
 export interface Portfolio {
   /** Cash available to trade or withdraw (perp-dex margin balance) */
   available_balance: number

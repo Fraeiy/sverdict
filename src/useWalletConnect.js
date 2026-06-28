@@ -10,7 +10,7 @@ import {
 } from '@unicitylabs/sphere-sdk/connect'
 import { PostMessageTransport, ExtensionTransport } from '@unicitylabs/sphere-sdk/connect/browser'
 import { isInIframe, hasExtension } from './lib/detection'
-import { toHuman } from './lib/amount'
+import { toHuman, toRawString } from './lib/amount'
 import { isUctAsset, resolveCoinId } from './lib/sphereCoins'
 
 const WALLET_URL = import.meta.env.VITE_WALLET_URL || 'https://sphere.unicity.network'
@@ -297,14 +297,11 @@ export function useWalletConnect() {
   }, [intent])
 
   /** Send UCT — opens Sphere wallet for user to sign & confirm.
-   *  amountHuman is the direct human amount in UCT (e.g. 25 for 25 UCT).
-   *  We pass the chosen amount directly (as string) since only UCT is used
-   *  and the pools/bet records also treat amounts as human UCT numbers.
-   *  The wallet/SDK will handle the on-chain units/decimals for the coin.
+   *  amountHuman is human UCT (e.g. 50). Connect v2 expects raw base units (18 decimals).
    */
   const sendPayment = useCallback(async ({ recipient, amountHuman, coinId = 'UCT', memo }) => {
     const to = normalizeRecipient(recipient)
-    const params = { to, amount: String(amountHuman), coinId: resolveCoinId(coinId) }
+    const params = { to, amount: toRawString(amountHuman), coinId: resolveCoinId(coinId) }
     if (memo) params.memo = memo
     const result = await intent(INTENT_ACTIONS.SEND, params)
     await refreshBalance()

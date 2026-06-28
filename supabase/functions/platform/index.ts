@@ -299,6 +299,58 @@ Deno.serve(async (req) => {
     if (route === '/auth') return json({ user, portfolio: await getPortfolio(db, user.id) })
     if (route === '/portfolio') return json(await getPortfolio(db, user.id))
 
+    if (route === '/history') {
+      const [{ data: deposits }, { data: withdrawals }, { data: trades }, { data: settlements }, { data: markets }] = await Promise.all([
+        db.from('deposits').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(100),
+        db.from('withdrawals').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(100),
+        db.from('trades').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(100),
+        db.from('positions').select('*').eq('user_id', user.id).eq('status', 'settled').gt('payout', 0).order('settled_at', { ascending: false }).limit(50),
+        db.from('markets').select('id, question'),
+      ])
+      const marketMap = new Map((markets || []).map(m => [m.id, m.question]))
+      const history = [
+        ...(deposits || []).map(d => ({
+          id: `deposit-${d.id}`,
+          type: 'deposit',
+          amount: Number(d.amount),
+          direction: 'in',
+          label: 'Deposit',
+          detail: d.tx_reference || null,
+          created_at: d.created_at,
+        })),
+        ...(withdrawals || []).map(w => ({
+          id: `withdrawal-${w.id}`,
+          type: 'withdrawal',
+          amount: Number(w.amount),
+          direction: 'out',
+          label: 'Withdrawal',
+          detail: w.status,
+          created_at: w.created_at,
+        })),
+        ...(trades || []).map(t => ({
+          id: `trade-${t.id}`,
+          type: 'trade',
+          amount: Number(t.total_cost),
+          direction: 'out',
+          label: `Trade ${t.side}`,
+          detail: marketMap.get(t.market_id) || t.market_id,
+          market_id: t.market_id,
+          created_at: t.created_at,
+        })),
+        ...(settlements || []).map(s => ({
+          id: `settlement-${s.id}`,
+          type: 'settlement',
+          amount: Number(s.payout),
+          direction: 'in',
+          label: 'Market payout',
+          detail: marketMap.get(s.market_id) || s.market_id,
+          market_id: s.market_id,
+          created_at: s.settled_at || s.created_at,
+        })),
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      return json({ history })
+    }
+
     if (route === '/deposits' && req.method === 'POST') {
       const amount = Number(payload.amount)
       if (!amount || amount <= 0) throw new Error('Invalid deposit amount')

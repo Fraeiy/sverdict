@@ -1,4 +1,4 @@
-import type { Market, Portfolio, User } from './types'
+import type { HistoryEntry, Market, Portfolio, User } from './types'
 
 const API_BASE = import.meta.env.VITE_MARKET_API_URL
   ? String(import.meta.env.VITE_MARKET_API_URL).replace(/\/$/, '').replace(/\/api$/, '') + '/api'
@@ -54,6 +54,10 @@ export async function fetchMarket(id: string) {
 
 export async function fetchPortfolio(auth: AuthHeaders) {
   return request<Portfolio>('/portfolio', { headers: authHeaders(auth) })
+}
+
+export async function fetchHistory(auth: AuthHeaders) {
+  return request<{ history: HistoryEntry[] }>('/history', { headers: authHeaders(auth) })
 }
 
 export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
