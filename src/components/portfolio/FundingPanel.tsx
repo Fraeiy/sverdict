@@ -61,7 +61,7 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
             </p>
           ) : (
             <p className="mb-4 text-sm text-slate-400">
-              Available: {fmtUct(availableBalance)}
+              Available: {fmtUct(availableBalance)}. Funds are sent from the @sphere-predict treasury to your Sphere wallet — usually within a few minutes after you request.
             </p>
           )}
           <input
@@ -79,7 +79,7 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
                 mode === 'deposit' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-white/10 hover:bg-white/15'
               }`}
             >
-              {loading ? 'Processing…' : mode === 'deposit' ? 'Approve in Sphere' : 'Withdraw'}
+              {loading ? 'Processing…' : mode === 'deposit' ? 'Approve in Sphere' : 'Queue withdrawal'}
             </button>
             <button onClick={() => setMode(null)} className="rounded-xl px-4 py-3 text-slate-400 hover:text-white">
               Cancel

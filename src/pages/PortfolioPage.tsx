@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { FundingPanel } from '../components/portfolio/FundingPanel'
 import { HistoryList } from '../components/portfolio/HistoryList'
 import { PositionCard } from '../components/portfolio/PositionCard'
@@ -20,12 +21,28 @@ type Props = {
   onToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }
 
+function tabFromParam(value: string | null): Tab {
+  if (value === 'positions' || value === 'history') return value
+  return 'overview'
+}
+
 export function PortfolioPage({ identity, wallet, onToast }: Props) {
-  const [tab, setTab] = useState<Tab>('overview')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => tabFromParam(searchParams.get('tab')))
+
   const platform = usePlatform(identity)
   const { portfolio, openPositions, resolvedPositions, availableBalance, deposit, withdraw, loading, refresh } = usePositions(identity)
   const { entries: history, loading: historyLoading, refresh: refreshHistory } = useHistory(identity)
   const { depositToPortfolio } = useSpherePayment(wallet, platform.treasuryAddress)
+
+  useEffect(() => {
+    setTab(tabFromParam(searchParams.get('tab')))
+  }, [searchParams])
+
+  function selectTab(next: Tab) {
+    setTab(next)
+    setSearchParams(next === 'overview' ? {} : { tab: next }, { replace: true })
+  }
 
   async function handleDeposit(amount: number) {
     try {
@@ -47,7 +64,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
       await withdraw(amount)
       await refresh()
       await refreshHistory()
-      onToast(`Withdrew ${fmtUct(amount)} to your Sphere wallet`, 'success')
+      onToast(`Withdrawal of ${fmtUct(amount)} queued — treasury will send to your Sphere wallet`, 'info')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Withdraw failed', 'error')
       throw e
@@ -62,9 +79,9 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
     )
   }
 
-  const tabs: { id: Tab; label: string }[] = [
+  const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'positions', label: 'Positions' },
+    { id: 'positions', label: 'Positions', badge: openPositions.length || undefined },
     { id: 'history', label: 'History' },
   ]
 
@@ -85,29 +102,59 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
         {tabs.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
+            onClick={() => selectTab(t.id)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
               tab === t.id
                 ? 'border-blue-500 text-white'
                 : 'border-transparent text-slate-500 hover:text-white'
             }`}
           >
             {t.label}
+            {t.badge ? (
+              <span className="rounded-full bg-blue-600/30 px-2 py-0.5 text-xs font-bold text-blue-300">
+                {t.badge}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
 
       <div className="mt-8">
         {tab === 'overview' && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Total value" value={fmtUct(portfolio?.total_portfolio_value ?? 0)} />
-            <Stat label="Available" value={fmtUct(availableBalance)} />
-            <Stat label="In positions" value={fmtUct(portfolio?.total_staked ?? 0)} />
-            <Stat
-              label="Total PnL"
-              value={`${(portfolio?.total_pnl ?? 0) >= 0 ? '+' : ''}${fmtUct(portfolio?.total_pnl ?? 0)}`}
-              accent={(portfolio?.total_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}
-            />
+          <div className="space-y-8">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat label="Total value" value={fmtUct(portfolio?.total_portfolio_value ?? 0)} />
+              <Stat label="Available" value={fmtUct(availableBalance)} />
+              <Stat label="In positions" value={fmtUct(portfolio?.total_staked ?? 0)} />
+              <Stat
+                label="Total PnL"
+                value={`${(portfolio?.total_pnl ?? 0) >= 0 ? '+' : ''}${fmtUct(portfolio?.total_pnl ?? 0)}`}
+                accent={(portfolio?.total_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+              />
+            </div>
+
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Open positions</h2>
+                {openPositions.length > 0 && (
+                  <button
+                    onClick={() => selectTab('positions')}
+                    className="text-sm text-blue-400 hover:text-blue-300"
+                  >
+                    View all →
+                  </button>
+                )}
+              </div>
+              {openPositions.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 py-10 text-center text-slate-500">
+                  No open positions — deposit margin and trade on a market
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {openPositions.slice(0, 3).map(p => <PositionCard key={p.id} position={p} />)}
+                </div>
+              )}
+            </section>
           </div>
         )}
 

@@ -62,7 +62,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
     try {
       await placeTrade({ marketId: market!.id, outcome, amount: stakeAmount })
       onToast(`Bought ${outcome} for ${fmtUct(stakeAmount)}`, 'success')
-      navigate('/portfolio')
+      navigate('/portfolio?tab=positions')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Trade failed', 'error')
     } finally {

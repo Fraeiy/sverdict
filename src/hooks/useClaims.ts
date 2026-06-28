@@ -1,21 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as api from '../lib/api'
+import { authFromIdentity } from '../lib/auth'
 import type { Claim, WalletIdentity } from '../lib/types'
-
-function authFrom(identity: WalletIdentity | null): api.AuthHeaders | null {
-  if (!identity?.directAddress && !identity?.nametag) return null
-  return {
-    walletAddress: identity.directAddress || identity.nametag || '',
-    nametag: identity.nametag,
-    publicKey: identity.publicKey,
-  }
-}
 
 export function useClaims(identity: WalletIdentity | null) {
   const [claims, setClaims] = useState<Claim[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const auth = useMemo(() => authFrom(identity), [identity])
+  const auth = useMemo(() => authFromIdentity(identity), [identity])
 
   const refresh = useCallback(async () => {
     if (!auth) {

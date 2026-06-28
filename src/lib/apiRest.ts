@@ -7,6 +7,7 @@ const API_BASE = import.meta.env.VITE_MARKET_API_URL
 export interface AuthHeaders {
   walletAddress: string
   nametag?: string
+  directAddress?: string
   publicKey?: string
 }
 
@@ -15,6 +16,7 @@ function authHeaders(auth: AuthHeaders): Record<string, string> {
     'Content-Type': 'application/json',
     'X-Wallet-Address': auth.walletAddress,
     ...(auth.nametag ? { 'X-Wallet-Nametag': auth.nametag } : {}),
+    ...(auth.directAddress ? { 'X-Wallet-Direct': auth.directAddress } : {}),
     ...(auth.publicKey ? { 'X-Wallet-Pubkey': auth.publicKey } : {}),
   }
 }
@@ -111,6 +113,18 @@ export async function adminResolveMarket(auth: AuthHeaders, marketId: string, re
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify({ resolution }),
+  })
+}
+
+export async function adminListPendingWithdrawals(auth: AuthHeaders) {
+  return request<{ withdrawals: unknown[] }>('/admin/withdrawals/pending', { headers: authHeaders(auth) })
+}
+
+export async function adminFulfillWithdrawal(auth: AuthHeaders, withdrawalId: string, txReference?: string) {
+  return request(`/admin/withdrawals/fulfill/${withdrawalId}`, {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ txReference }),
   })
 }
 

@@ -1,23 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Market, User, WalletIdentity } from '../lib/types'
 import * as api from '../lib/api'
+import { authFromIdentity } from '../lib/auth'
 import { getTreasuryAddressFallback } from '../lib/config'
-
-function authFrom(identity: WalletIdentity | null): api.AuthHeaders | null {
-  if (!identity?.directAddress && !identity?.nametag) return null
-  return {
-    walletAddress: identity.directAddress || identity.nametag || '',
-    nametag: identity.nametag,
-    publicKey: identity.publicKey,
-  }
-}
 
 /** Admin + auth utilities for Sphere-native app */
 export function usePlatform(identity: WalletIdentity | null) {
   const [user, setUser] = useState<User | null>(null)
   const [treasuryAddress, setTreasuryAddress] = useState(getTreasuryAddressFallback())
   const [loading, setLoading] = useState(true)
-  const auth = useMemo(() => authFrom(identity), [identity])
+  const auth = useMemo(() => authFromIdentity(identity), [identity])
 
   const bootstrap = useCallback(async () => {
     if (!auth) {
@@ -68,6 +60,14 @@ export function usePlatform(identity: WalletIdentity | null) {
     async closeMarket(marketId: string) {
       if (!auth) throw new Error('Not connected')
       return api.adminCloseMarket(auth, marketId)
+    },
+    async listPendingWithdrawals() {
+      if (!auth) throw new Error('Not connected')
+      return api.adminListPendingWithdrawals(auth)
+    },
+    async fulfillWithdrawal(withdrawalId: string, txReference?: string) {
+      if (!auth) throw new Error('Not connected')
+      return api.adminFulfillWithdrawal(auth, withdrawalId, txReference)
     },
   }
 }

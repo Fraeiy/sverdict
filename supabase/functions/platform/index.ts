@@ -2,7 +2,7 @@ import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-wallet-address, x-wallet-nametag, x-wallet-pubkey',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-wallet-address, x-wallet-nametag, x-wallet-direct, x-wallet-pubkey',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
 }
 
@@ -47,20 +47,46 @@ function currentPositionValue(position: { side: string; quantity: number; cost_b
   return potentialPayout(position, market)
 }
 
-async function findOrCreateUser(db: SupabaseClient, auth: { walletAddress: string; nametag?: string; publicKey?: string }) {
-  const key = normalizeWallet(auth.walletAddress)
+type WalletAuth = { walletAddress: string; nametag?: string; directAddress?: string; publicKey?: string }
+
+function userAuthKeys(auth: WalletAuth) {
+  const keys = new Set<string>()
+  for (const raw of [auth.walletAddress, auth.nametag, auth.directAddress]) {
+    if (!raw) continue
+    keys.add(normalizeWallet(raw))
+  }
+  return keys
+}
+
+function userMatchesAuth(u: { wallet_address: string; nametag?: string | null }, auth: WalletAuth) {
+  const keys = userAuthKeys(auth)
+  if (keys.has(normalizeWallet(u.wallet_address))) return true
+  if (u.nametag && keys.has(normalizeWallet(u.nametag))) return true
+  return false
+}
+
+async function findOrCreateUser(db: SupabaseClient, auth: WalletAuth) {
   const { data: users } = await db.from('users').select('*')
-  let user = (users || []).find(u => normalizeWallet(u.wallet_address) === key)
+  let user = (users || []).find(u => userMatchesAuth(u, auth))
   if (!user) {
+    const wallet = auth.directAddress || auth.nametag || auth.walletAddress
     const { data, error } = await db.from('users').insert({
-      wallet_address: auth.walletAddress,
+      wallet_address: wallet,
       nametag: auth.nametag || null,
       public_key: auth.publicKey || null,
-      is_admin: isAdminWallet(auth.walletAddress) || isAdminWallet(auth.nametag),
+      is_admin: isAdminWallet(auth.walletAddress) || isAdminWallet(auth.nametag) || isAdminWallet(auth.directAddress),
     }).select().single()
     if (error) throw error
     user = data
     await db.from('balances').insert({ user_id: user.id, available_balance: 0 }).catch(() => {})
+  } else {
+    const updates: Record<string, string | null> = {}
+    if (auth.nametag && !user.nametag) updates.nametag = auth.nametag
+    if (auth.publicKey && !user.public_key) updates.public_key = auth.publicKey
+    if (Object.keys(updates).length) {
+      await db.from('users').update(updates).eq('id', user.id)
+      user = { ...user, ...updates }
+    }
   }
   return user
 }
@@ -90,13 +116,13 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
     getBalance(db, userId),
   ])
 
-  const marketMap = new Map((markets || []).map(m => [m.id, m]))
+  const marketMap = new Map((markets || []).map(m => [String(m.id), m]))
   const open = (positions || []).filter(p => p.status === 'open')
   const settled = (positions || []).filter(p => p.status === 'settled')
 
   let unrealizedPnl = 0
   const openWithValue = open.map(p => {
-    const market = marketMap.get(p.market_id)
+    const market = marketMap.get(String(p.market_id))
     const currentValue = market ? currentPositionValue(p, market) : Number(p.cost_basis || 0)
     const payout = market ? potentialPayout(p, market) : Number(p.cost_basis || 0)
     const pnl = currentValue - Number(p.cost_basis || 0)
@@ -118,7 +144,7 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
     outcome: p.side,
     shares: Number(p.shares ?? p.quantity),
     stake_amount: Number(p.stake_amount ?? p.cost_basis),
-    market: marketMap.get(p.market_id),
+    market: marketMap.get(String(p.market_id)),
   }))
 
   const realizedPnl = settled.reduce((s, p) => s + Number(p.pnl || 0), 0)
@@ -217,7 +243,7 @@ async function placeTrade(db: SupabaseClient, userId: string, payload: Record<st
       cost_basis: Number(existing.cost_basis) + cost,
     }).eq('id', existing.id)
   } else {
-    await db.from('positions').insert({
+    const { error: posErr } = await db.from('positions').insert({
       user_id: userId,
       market_id: marketId,
       side,
@@ -227,9 +253,10 @@ async function placeTrade(db: SupabaseClient, userId: string, payload: Record<st
       avg_entry: price,
       cost_basis: cost,
     })
+    if (posErr) throw new Error(`Failed to open position: ${posErr.message}`)
   }
 
-  await db.from('trades').insert({
+  const { error: tradeErr } = await db.from('trades').insert({
     user_id: userId,
     market_id: marketId,
     side,
@@ -237,8 +264,9 @@ async function placeTrade(db: SupabaseClient, userId: string, payload: Record<st
     price,
     total_cost: cost,
   })
+  if (tradeErr) throw new Error(`Failed to record trade: ${tradeErr.message}`)
 
-  await notify(db, userId, 'trade', 'Trade executed', `Bought ${side} for ${cost.toFixed(2)} UCT from your portfolio.`, { marketId, side, amount: cost })
+  await notify(db, userId, 'trade', 'Trade executed', `Bought ${side} for ${cost.toFixed(2)} UCT from your portfolio.`, { marketId, side, amount: cost }).catch(() => {})
   return getPortfolio(db, userId)
 }
 
@@ -254,6 +282,7 @@ Deno.serve(async (req) => {
 
   const walletAddress = req.headers.get('x-wallet-address') || String(payload.walletAddress || '')
   const nametag = req.headers.get('x-wallet-nametag') || (payload.nametag as string | undefined)
+  const directAddress = req.headers.get('x-wallet-direct') || (payload.directAddress as string | undefined)
   const publicKey = req.headers.get('x-wallet-pubkey') || (payload.publicKey as string | undefined)
 
   try {
@@ -294,7 +323,7 @@ Deno.serve(async (req) => {
     }
 
     if (!walletAddress) return json({ error: 'Wallet authentication required' }, 401)
-    const user = await findOrCreateUser(db, { walletAddress, nametag, publicKey })
+    const user = await findOrCreateUser(db, { walletAddress, nametag, directAddress, publicKey })
 
     if (route === '/auth') return json({ user, portfolio: await getPortfolio(db, user.id) })
     if (route === '/portfolio') return json(await getPortfolio(db, user.id))
@@ -323,8 +352,8 @@ Deno.serve(async (req) => {
           type: 'withdrawal',
           amount: Number(w.amount),
           direction: 'out',
-          label: 'Withdrawal',
-          detail: w.status,
+          label: w.status === 'completed' ? 'Withdrawal sent' : 'Withdrawal queued',
+          detail: w.status === 'submitted' ? 'Pending treasury send from @sphere-predict' : 'Completed',
           created_at: w.created_at,
         })),
         ...(trades || []).map(t => ({
@@ -371,15 +400,23 @@ Deno.serve(async (req) => {
       const amount = Number(payload.amount)
       const bal = await getBalance(db, user.id)
       if (!amount || amount <= 0 || amount > bal) throw new Error('Insufficient portfolio balance')
+      // Reserve funds in portfolio ledger; treasury (@sphere-predict) sends UCT on-chain when admin fulfills.
       await setBalance(db, user.id, bal - amount)
-      await db.from('withdrawals').insert({
+      const { data: withdrawal, error: wErr } = await db.from('withdrawals').insert({
         user_id: user.id,
         amount,
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      }).catch(() => {})
-      await notify(db, user.id, 'withdrawal', 'Withdrawal submitted', `${amount.toFixed(2)} UCT sent to your Sphere wallet.`, { amount })
-      return json({ portfolio: await getPortfolio(db, user.id) })
+        status: 'submitted',
+      }).select().single()
+      if (wErr) throw wErr
+      await notify(
+        db,
+        user.id,
+        'withdrawal',
+        'Withdrawal queued',
+        `${amount.toFixed(2)} UCT queued — treasury will send to your Sphere wallet.`,
+        { amount, withdrawalId: withdrawal?.id },
+      ).catch(() => {})
+      return json({ portfolio: await getPortfolio(db, user.id), withdrawal })
     }
 
     if ((route === '/trades' || route === '/stakes') && req.method === 'POST') {
@@ -471,6 +508,37 @@ Deno.serve(async (req) => {
       })
 
       return json({ market: { ...market, status: 'resolved', resolution: res }, settlement: { total_payout: totalPayout } })
+    }
+
+    if (route === '/admin/withdrawals/pending') {
+      const { data } = await db.from('withdrawals')
+        .select('*, users(nametag, wallet_address)')
+        .eq('status', 'submitted')
+        .order('created_at', { ascending: true })
+      return json({ withdrawals: data || [] })
+    }
+
+    const fulfillMatch = route.match(/^\/admin\/withdrawals\/fulfill\/(.+)$/)
+    if (fulfillMatch) {
+      const withdrawalId = fulfillMatch[1]
+      const { data: w, error } = await db.from('withdrawals').select('*, users(*)').eq('id', withdrawalId).single()
+      if (error || !w) throw new Error('Withdrawal not found')
+      if (w.status === 'completed') throw new Error('Already fulfilled')
+      await db.from('withdrawals').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        tx_reference: payload.txReference ? String(payload.txReference) : `treasury_send_${Date.now()}`,
+      }).eq('id', withdrawalId)
+      const recipient = w.users?.nametag || w.users?.wallet_address || 'user'
+      await notify(
+        db,
+        w.user_id,
+        'withdrawal',
+        'Withdrawal sent',
+        `${Number(w.amount).toFixed(2)} UCT sent from @sphere-predict to ${recipient}.`,
+        { withdrawalId, amount: w.amount },
+      ).catch(() => {})
+      return json({ ok: true })
     }
 
     return json({ error: 'Not found' }, 404)

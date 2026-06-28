@@ -7,6 +7,7 @@ function walletHeaders(auth?: AuthHeaders): Record<string, string> {
   return {
     'X-Wallet-Address': auth.walletAddress,
     ...(auth.nametag ? { 'X-Wallet-Nametag': auth.nametag } : {}),
+    ...(auth.directAddress ? { 'X-Wallet-Direct': auth.directAddress } : {}),
     ...(auth.publicKey ? { 'X-Wallet-Pubkey': auth.publicKey } : {}),
   }
 }
@@ -119,6 +120,14 @@ export async function adminCloseMarket(auth: AuthHeaders, marketId: string) {
 
 export async function adminResolveMarket(auth: AuthHeaders, marketId: string, resolution: 'YES' | 'NO') {
   return invoke(`/admin/markets/resolve/${marketId}`, { auth, payload: { resolution } })
+}
+
+export async function adminListPendingWithdrawals(auth: AuthHeaders) {
+  return invoke<{ withdrawals: unknown[] }>('/admin/withdrawals/pending', { auth })
+}
+
+export async function adminFulfillWithdrawal(auth: AuthHeaders, withdrawalId: string, txReference?: string) {
+  return invoke(`/admin/withdrawals/fulfill/${withdrawalId}`, { auth, payload: { txReference } })
 }
 
 export function subscribeToMarkets(onUpdate: () => void) {
