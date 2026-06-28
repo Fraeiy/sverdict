@@ -65,24 +65,42 @@ async function findOrCreateUser(db: SupabaseClient, auth: { walletAddress: strin
   return user
 }
 
+async function getBalance(db: SupabaseClient, userId: string) {
+  const { data } = await db.from('balances').select('available_balance').eq('user_id', userId).single()
+  return Number(data?.available_balance || 0)
+}
+
+async function setBalance(db: SupabaseClient, userId: string, amount: number) {
+  const { error } = await db.from('balances').upsert({
+    user_id: userId,
+    available_balance: amount,
+    updated_at: new Date().toISOString(),
+  })
+  if (error) throw error
+}
+
 async function notify(db: SupabaseClient, userId: string, type: string, title: string, body: string, metadata: Record<string, unknown> = {}) {
   await db.from('notifications').insert({ user_id: userId, type, title, body, metadata })
 }
 
 async function getPortfolio(db: SupabaseClient, userId: string) {
-  const [{ data: positions }, { data: markets }, { data: claims }] = await Promise.all([
+  const [{ data: positions }, { data: markets }, available] = await Promise.all([
     db.from('positions').select('*').eq('user_id', userId),
     db.from('markets').select('*'),
-    db.from('claims').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+    getBalance(db, userId),
   ])
+
   const marketMap = new Map((markets || []).map(m => [m.id, m]))
   const open = (positions || []).filter(p => p.status === 'open')
   const settled = (positions || []).filter(p => p.status === 'settled')
 
+  let unrealizedPnl = 0
   const openWithValue = open.map(p => {
     const market = marketMap.get(p.market_id)
     const currentValue = market ? currentPositionValue(p, market) : Number(p.cost_basis || 0)
     const payout = market ? potentialPayout(p, market) : Number(p.cost_basis || 0)
+    const pnl = currentValue - Number(p.cost_basis || 0)
+    unrealizedPnl += pnl
     return {
       ...p,
       outcome: p.side,
@@ -90,7 +108,7 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
       stake_amount: Number(p.stake_amount ?? p.cost_basis),
       market,
       current_value: currentValue,
-      unrealized_pnl: currentValue - Number(p.cost_basis || 0),
+      unrealized_pnl: pnl,
       potential_payout: payout,
     }
   })
@@ -103,21 +121,21 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
     market: marketMap.get(p.market_id),
   }))
 
-  const pendingClaims = (claims || [])
-    .filter(c => c.status === 'pending')
-    .map(c => ({ ...c, market: marketMap.get(c.market_id) }))
-
+  const realizedPnl = settled.reduce((s, p) => s + Number(p.pnl || 0), 0)
   const totalStaked = openWithValue.reduce((s, p) => s + Number(p.stake_amount ?? p.cost_basis), 0)
-  const totalClaimable = pendingClaims.reduce((s, c) => s + Number(c.amount), 0)
   const estimatedValue = openWithValue.reduce((s, p) => s + Number(p.current_value || 0), 0)
+  const positionsValue = estimatedValue
 
   return {
+    available_balance: available,
+    total_portfolio_value: available + positionsValue,
+    total_staked: totalStaked,
+    estimated_value: estimatedValue,
+    unrealized_pnl: unrealizedPnl,
+    realized_pnl: realizedPnl,
+    total_pnl: unrealizedPnl + realizedPnl,
     open_positions: openWithValue,
     resolved_positions: resolvedPositions,
-    pending_claims: pendingClaims,
-    total_staked: totalStaked,
-    total_claimable: totalClaimable,
-    estimated_value: estimatedValue,
   }
 }
 
@@ -152,15 +170,16 @@ async function listMarkets(db: SupabaseClient, params: { search?: string; catego
   })
 }
 
-async function placeStake(db: SupabaseClient, userId: string, payload: Record<string, unknown>) {
+async function placeTrade(db: SupabaseClient, userId: string, payload: Record<string, unknown>) {
   const marketId = String(payload.marketId || '')
   const side = String(payload.outcome || payload.side || '').toUpperCase()
   const cost = Number(payload.amount)
-  const txReference = payload.txReference ? String(payload.txReference) : null
-  const memo = payload.memo ? String(payload.memo) : `market:${marketId}:outcome:${side}`
 
-  if (!marketId || !['YES', 'NO'].includes(side)) throw new Error('Invalid stake request')
-  if (!cost || cost <= 0) throw new Error('Invalid stake amount')
+  if (!marketId || !['YES', 'NO'].includes(side)) throw new Error('Invalid trade request')
+  if (!cost || cost <= 0) throw new Error('Invalid trade amount')
+
+  const bal = await getBalance(db, userId)
+  if (cost > bal) throw new Error('Insufficient portfolio balance — deposit funds first')
 
   const { data: market, error: mErr } = await db.from('markets').select('*').eq('id', marketId).single()
   if (mErr || !market) throw new Error('Market not found')
@@ -170,6 +189,8 @@ async function placeStake(db: SupabaseClient, userId: string, payload: Record<st
   const totalBefore = Number(market.yes_pool) + Number(market.no_pool)
   const pool = side === 'YES' ? Number(market.yes_pool) : Number(market.no_pool)
   const price = totalBefore > 0 ? pool / totalBefore : 0.5
+
+  await setBalance(db, userId, bal - cost)
 
   await db.from('markets').update({
     yes_pool: side === 'YES' ? pool + cost : market.yes_pool,
@@ -194,7 +215,6 @@ async function placeStake(db: SupabaseClient, userId: string, payload: Record<st
       stake_amount: Number(existing.stake_amount ?? existing.cost_basis) + cost,
       avg_entry: ((Number(existing.avg_entry) * Number(existing.quantity)) + (price * cost)) / newQty,
       cost_basis: Number(existing.cost_basis) + cost,
-      tx_reference: txReference,
     }).eq('id', existing.id)
   } else {
     await db.from('positions').insert({
@@ -206,7 +226,6 @@ async function placeStake(db: SupabaseClient, userId: string, payload: Record<st
       stake_amount: cost,
       avg_entry: price,
       cost_basis: cost,
-      tx_reference: txReference,
     })
   }
 
@@ -217,10 +236,9 @@ async function placeStake(db: SupabaseClient, userId: string, payload: Record<st
     quantity: cost,
     price,
     total_cost: cost,
-    signed_message: memo,
   })
 
-  await notify(db, userId, 'stake', 'Position opened', `You staked ${cost.toFixed(2)} UCT on ${side}.`, { marketId, side, amount: cost, memo })
+  await notify(db, userId, 'trade', 'Trade executed', `Bought ${side} for ${cost.toFixed(2)} UCT from your portfolio.`, { marketId, side, amount: cost })
   return getPortfolio(db, userId)
 }
 
@@ -239,7 +257,7 @@ Deno.serve(async (req) => {
   const publicKey = req.headers.get('x-wallet-pubkey') || (payload.publicKey as string | undefined)
 
   try {
-    if (route === '/health') return json({ ok: true, service: 'sphere-predict-supabase', flow: 'sphere-native' })
+    if (route === '/health') return json({ ok: true, service: 'sphere-predict-supabase', flow: 'portfolio-margin' })
 
     if (route === '/treasury') {
       const { data } = await db.from('treasury_config').select('treasury_address').eq('id', 1).single()
@@ -281,39 +299,39 @@ Deno.serve(async (req) => {
     if (route === '/auth') return json({ user, portfolio: await getPortfolio(db, user.id) })
     if (route === '/portfolio') return json(await getPortfolio(db, user.id))
 
-    if (route === '/claims') {
-      const portfolio = await getPortfolio(db, user.id)
-      return json({ claims: portfolio.pending_claims })
+    if (route === '/deposits' && req.method === 'POST') {
+      const amount = Number(payload.amount)
+      if (!amount || amount <= 0) throw new Error('Invalid deposit amount')
+      const bal = await getBalance(db, user.id)
+      await setBalance(db, user.id, bal + amount)
+      await db.from('deposits').insert({
+        user_id: user.id,
+        amount,
+        tx_reference: payload.txReference || null,
+        status: 'confirmed',
+        confirmed_at: new Date().toISOString(),
+      }).catch(() => {})
+      await notify(db, user.id, 'deposit', 'Deposit confirmed', `${amount.toFixed(2)} UCT added to your portfolio.`, { amount })
+      return json({ portfolio: await getPortfolio(db, user.id) })
     }
 
-    const claimMatch = route.match(/^\/claims\/([^/]+)\/claim$/)
-    if (claimMatch && req.method === 'POST') {
-      const claimId = claimMatch[1]
-      const { data: claim, error } = await db.from('claims').select('*').eq('id', claimId).eq('user_id', user.id).single()
-      if (error || !claim) throw new Error('Claim not found')
-      if (claim.status === 'claimed') throw new Error('Reward already claimed')
-
-      const txRef = payload.txReference ? String(payload.txReference) : `claim_${Date.now()}`
-      await db.from('claims').update({
-        status: 'claimed',
-        claimed_at: new Date().toISOString(),
-        tx_reference: txRef,
-      }).eq('id', claimId)
-
-      await notify(
-        db,
-        user.id,
-        'claim',
-        'Reward claimed',
-        `${Number(claim.amount).toFixed(2)} UCT sent to your Sphere wallet.`,
-        { claimId, amount: claim.amount },
-      )
-
-      return json({ claim: { ...claim, status: 'claimed', claimed_at: new Date().toISOString() }, amount: claim.amount })
+    if (route === '/withdrawals' && req.method === 'POST') {
+      const amount = Number(payload.amount)
+      const bal = await getBalance(db, user.id)
+      if (!amount || amount <= 0 || amount > bal) throw new Error('Insufficient portfolio balance')
+      await setBalance(db, user.id, bal - amount)
+      await db.from('withdrawals').insert({
+        user_id: user.id,
+        amount,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      }).catch(() => {})
+      await notify(db, user.id, 'withdrawal', 'Withdrawal submitted', `${amount.toFixed(2)} UCT sent to your Sphere wallet.`, { amount })
+      return json({ portfolio: await getPortfolio(db, user.id) })
     }
 
-    if ((route === '/stakes' || route === '/trades') && req.method === 'POST') {
-      const portfolio = await placeStake(db, user.id, payload)
+    if ((route === '/trades' || route === '/stakes') && req.method === 'POST') {
+      const portfolio = await placeTrade(db, user.id, payload)
       return json({ portfolio })
     }
 
@@ -371,13 +389,8 @@ Deno.serve(async (req) => {
           payout = (Number(pos.quantity) / winningPool) * totalPool
           pnl = payout - Number(pos.cost_basis || 0)
           totalPayout += payout
-          await db.from('claims').insert({
-            user_id: pos.user_id,
-            market_id: marketId,
-            position_id: pos.id,
-            amount: payout,
-            status: 'pending',
-          })
+          const bal = await getBalance(db, pos.user_id)
+          await setBalance(db, pos.user_id, bal + payout)
         }
         await db.from('positions').update({
           status: 'settled',
@@ -390,10 +403,10 @@ Deno.serve(async (req) => {
           db,
           pos.user_id,
           'market',
-          won ? 'Market resolved — claim your reward' : 'Market resolved',
+          won ? 'You won!' : 'Market resolved',
           won
-            ? `You won ${payout.toFixed(2)} UCT. Claim it from your portfolio.`
-            : `Market resolved ${res}. Your position did not win.`,
+            ? `${payout.toFixed(2)} UCT credited to your portfolio. Withdraw anytime.`
+            : `Market resolved ${res}.`,
           { marketId, payout, pnl, won },
         )
       }

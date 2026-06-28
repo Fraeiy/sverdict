@@ -1,4 +1,4 @@
-import type { Claim, Market, Portfolio, User } from './types'
+import type { Market, Portfolio, User } from './types'
 
 const API_BASE = import.meta.env.VITE_MARKET_API_URL
   ? String(import.meta.env.VITE_MARKET_API_URL).replace(/\/$/, '').replace(/\/api$/, '') + '/api'
@@ -56,23 +56,27 @@ export async function fetchPortfolio(auth: AuthHeaders) {
   return request<Portfolio>('/portfolio', { headers: authHeaders(auth) })
 }
 
-export async function fetchClaims(auth: AuthHeaders) {
-  return request<{ claims: Claim[] }>('/claims', { headers: authHeaders(auth) })
-}
-
-export async function claimReward(auth: AuthHeaders, claimId: string) {
-  return request<{ claim: Claim; amount: number }>(`/claims/${claimId}/claim`, {
+export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
+  return request<{ portfolio: Portfolio }>('/deposits', {
     method: 'POST',
     headers: authHeaders(auth),
-    body: '{}',
+    body: JSON.stringify({ amount, txReference }),
   })
 }
 
-export async function placeStake(
+export async function withdraw(auth: AuthHeaders, amount: number) {
+  return request<{ portfolio: Portfolio }>('/withdrawals', {
+    method: 'POST',
+    headers: authHeaders(auth),
+    body: JSON.stringify({ amount }),
+  })
+}
+
+export async function placeTrade(
   auth: AuthHeaders,
-  payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number; txReference?: string; memo?: string },
+  payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number },
 ) {
-  return request<{ portfolio: Portfolio }>('/stakes', {
+  return request<{ portfolio: Portfolio }>('/trades', {
     method: 'POST',
     headers: authHeaders(auth),
     body: JSON.stringify(payload),

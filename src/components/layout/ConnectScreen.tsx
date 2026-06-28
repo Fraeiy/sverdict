@@ -33,7 +33,7 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Trade the future</h1>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">
-            Connect once with Sphere. Stake on markets in one tap — no addresses, no manual transfers.
+            Connect once with Sphere. Deposit margin to your portfolio, trade instantly, withdraw anytime.
           </p>
         </div>
 
@@ -71,9 +71,9 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
         {wallet.error && <p className="mt-4 text-center text-sm text-red-400">{wallet.error}</p>}
 
         <div className="mt-8 grid grid-cols-3 gap-3 text-center text-xs text-slate-500">
-          <div className="rounded-xl bg-white/5 p-3">One-tap stakes</div>
-          <div className="rounded-xl bg-white/5 p-3">Nametag identity</div>
-          <div className="rounded-xl bg-white/5 p-3">Instant claims</div>
+          <div className="rounded-xl bg-white/5 p-3">Portfolio margin</div>
+          <div className="rounded-xl bg-white/5 p-3">Instant trades</div>
+          <div className="rounded-xl bg-white/5 p-3">Easy withdraw</div>
         </div>
       </div>
     </div>

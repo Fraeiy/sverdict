@@ -2,12 +2,13 @@
 
 This refactor replaces the deposit-first internal ledger UX with a **direct Sphere payment** staking model.
 
-## User flow (new)
+## User flow (perp-dex portfolio model)
 
 ```
-Home → Market List → Market Detail → Buy YES/NO
-  → Sphere wallet approval → Position created → Portfolio
-  → Market resolution → Claim rewards
+Connect Sphere → Deposit to portfolio (Sphere approval once)
+  → Trade YES/NO from portfolio balance (instant, no popup)
+  → Market resolves → Winnings credited to portfolio
+  → Withdraw to Sphere wallet anytime
 ```
 
 ## Removed

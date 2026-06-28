@@ -67,16 +67,18 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route
             path="markets/:id"
+            element={<MarketDetailPage identity={wallet.identity} onToast={showToast} />}
+          />
+          <Route
+            path="portfolio"
             element={
-              <MarketDetailPage
+              <PortfolioPage
                 identity={wallet.identity}
                 wallet={wallet}
-                treasuryAddress={platform.treasuryAddress}
                 onToast={showToast}
               />
             }
           />
-          <Route path="portfolio" element={<PortfolioPage identity={wallet.identity} />} />
           <Route
             path="admin"
             element={

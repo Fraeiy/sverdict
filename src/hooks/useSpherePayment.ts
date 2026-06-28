@@ -1,48 +1,36 @@
 import { useCallback } from 'react'
 import { getTreasuryAddressFallback } from '../lib/config'
-import { stakeMemo } from '../lib/format'
-import type { Outcome } from '../lib/types'
 
 type WalletLike = {
   sendPayment?: (p: { recipient: string; amountHuman: number; coinId?: string; memo?: string }) => Promise<unknown>
   refreshBalance?: () => Promise<void>
 }
 
+/** Sphere payments are only used for depositing margin into the portfolio treasury. */
 export function useSpherePayment(wallet: WalletLike, treasuryAddress?: string) {
   const treasury = treasuryAddress || getTreasuryAddressFallback() || '@sphere-predict'
 
-  const stake = useCallback(async (params: {
-    marketId: string
-    outcome: Outcome
-    amount: number
-  }) => {
+  const depositToPortfolio = useCallback(async (amount: number) => {
     if (!wallet.sendPayment) throw new Error('Sphere wallet not ready')
-    const amount = Number(params.amount)
-    if (!amount || amount <= 0) throw new Error('Enter a valid stake amount')
+    const n = Number(amount)
+    if (!n || n <= 0) throw new Error('Enter a valid deposit amount')
 
-    const memo = stakeMemo(params.marketId, params.outcome)
     const result = await wallet.sendPayment({
       recipient: treasury,
-      amountHuman: amount,
+      amountHuman: n,
       coinId: 'UCT',
-      memo,
+      memo: 'SPHERE_PREDICT_DEPOSIT',
     })
 
     await wallet.refreshBalance?.()
-    return { result, memo, txReference: extractTxReference(result) }
+    return { result, txReference: extractTxReference(result) }
   }, [wallet, treasury])
 
-  return { stake, treasury }
+  return { depositToPortfolio, treasury }
 }
 
 function extractTxReference(result: unknown): string | undefined {
   if (!result || typeof result !== 'object') return undefined
   const r = result as Record<string, unknown>
-  return (
-    (r.txId as string) ||
-    (r.tx_id as string) ||
-    (r.transactionId as string) ||
-    (r.id as string) ||
-    undefined
-  )
+  return (r.txId as string) || (r.tx_id as string) || (r.transactionId as string) || (r.id as string) || undefined
 }

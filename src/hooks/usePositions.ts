@@ -47,15 +47,27 @@ export function usePositions(identity: WalletIdentity | null) {
     return () => clearInterval(interval)
   }, [auth, refresh])
 
-  const placeStake = useCallback(async (payload: {
+  const deposit = useCallback(async (amount: number, txReference?: string) => {
+    if (!auth) throw new Error('Connect your Sphere wallet')
+    const result = await api.deposit(auth, amount, txReference)
+    setPortfolio(result.portfolio)
+    return result.portfolio
+  }, [auth])
+
+  const withdraw = useCallback(async (amount: number) => {
+    if (!auth) throw new Error('Connect your Sphere wallet')
+    const result = await api.withdraw(auth, amount)
+    setPortfolio(result.portfolio)
+    return result.portfolio
+  }, [auth])
+
+  const placeTrade = useCallback(async (payload: {
     marketId: string
     outcome: 'YES' | 'NO'
     amount: number
-    txReference?: string
-    memo?: string
   }) => {
     if (!auth) throw new Error('Connect your Sphere wallet')
-    const result = await api.placeStake(auth, payload)
+    const result = await api.placeTrade(auth, payload)
     setPortfolio(result.portfolio)
     return result.portfolio
   }, [auth])
@@ -66,7 +78,10 @@ export function usePositions(identity: WalletIdentity | null) {
     error,
     auth,
     refresh,
-    placeStake,
+    deposit,
+    withdraw,
+    placeTrade,
+    availableBalance: portfolio?.available_balance ?? 0,
     openPositions: portfolio?.open_positions ?? [],
     resolvedPositions: portfolio?.resolved_positions ?? [],
   }

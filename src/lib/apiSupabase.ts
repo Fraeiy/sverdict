@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Claim, Market, Portfolio, User } from './types'
+import type { Market, Portfolio, User } from './types'
 import type { AuthHeaders } from './apiRest'
 
 function walletHeaders(auth?: AuthHeaders): Record<string, string> {
@@ -87,19 +87,19 @@ export async function fetchPortfolio(auth: AuthHeaders) {
   return invoke<Portfolio>('/portfolio', { auth })
 }
 
-export async function fetchClaims(auth: AuthHeaders) {
-  return invoke<{ claims: Claim[] }>('/claims', { auth })
+export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
+  return invoke<{ portfolio: Portfolio }>('/deposits', { auth, payload: { amount, txReference } })
 }
 
-export async function claimReward(auth: AuthHeaders, claimId: string) {
-  return invoke<{ claim: Claim; amount: number }>(`/claims/${claimId}/claim`, { auth })
+export async function withdraw(auth: AuthHeaders, amount: number) {
+  return invoke<{ portfolio: Portfolio }>('/withdrawals', { auth, payload: { amount } })
 }
 
-export async function placeStake(
+export async function placeTrade(
   auth: AuthHeaders,
-  payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number; txReference?: string; memo?: string },
+  payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number },
 ) {
-  return invoke<{ portfolio: Portfolio }>('/stakes', { auth, payload })
+  return invoke<{ portfolio: Portfolio }>('/trades', { auth, payload })
 }
 
 export async function adminCreateMarket(

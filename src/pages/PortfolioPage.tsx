@@ -1,13 +1,47 @@
-import { ClaimCard } from '../components/portfolio/ClaimCard'
+import { FundingPanel } from '../components/portfolio/FundingPanel'
 import { PositionCard } from '../components/portfolio/PositionCard'
-import { useClaims } from '../hooks/useClaims'
 import { usePositions } from '../hooks/usePositions'
+import { useSpherePayment } from '../hooks/useSpherePayment'
+import { usePlatform } from '../hooks/usePlatform'
 import type { WalletIdentity } from '../lib/types'
 import { fmtUct } from '../lib/format'
 
-export function PortfolioPage({ identity }: { identity: WalletIdentity | null }) {
-  const { portfolio, openPositions, resolvedPositions, loading } = usePositions(identity)
-  const { pendingClaims, totalClaimable, claimReward } = useClaims(identity)
+type Props = {
+  identity: WalletIdentity | null
+  wallet: {
+    sendPayment?: (p: { recipient: string; amountHuman: number; coinId?: string; memo?: string }) => Promise<unknown>
+    refreshBalance?: () => Promise<void>
+  }
+  onToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+}
+
+export function PortfolioPage({ identity, wallet, onToast }: Props) {
+  const platform = usePlatform(identity)
+  const { portfolio, openPositions, resolvedPositions, availableBalance, deposit, withdraw, loading } = usePositions(identity)
+  const { depositToPortfolio } = useSpherePayment(wallet, platform.treasuryAddress)
+
+  async function handleDeposit(amount: number) {
+    try {
+      onToast('Approve deposit in your Sphere wallet…', 'info')
+      const payment = await depositToPortfolio(amount)
+      await deposit(amount, payment.txReference)
+      await wallet.refreshBalance?.()
+      onToast(`Deposited ${fmtUct(amount)}`, 'success')
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Deposit failed', 'error')
+      throw e
+    }
+  }
+
+  async function handleWithdraw(amount: number) {
+    try {
+      await withdraw(amount)
+      onToast(`Withdrew ${fmtUct(amount)} to your Sphere wallet`, 'success')
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Withdraw failed', 'error')
+      throw e
+    }
+  }
 
   if (loading && !portfolio) {
     return (
@@ -21,40 +55,35 @@ export function PortfolioPage({ identity }: { identity: WalletIdentity | null })
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Portfolio</h1>
-        <p className="mt-2 text-slate-400">Your open positions and claimable rewards</p>
+        <p className="mt-2 text-slate-400">Your margin balance, positions, and PnL</p>
       </div>
 
-      <div className="mb-10 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-5">
-          <p className="text-xs text-slate-500">Total staked</p>
-          <p className="mt-1 text-2xl font-bold">{fmtUct(portfolio?.total_staked ?? 0)}</p>
-        </div>
-        <div className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-5">
-          <p className="text-xs text-slate-500">Estimated value</p>
-          <p className="mt-1 text-2xl font-bold">{fmtUct(portfolio?.estimated_value ?? 0)}</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-          <p className="text-xs text-emerald-400">Claimable rewards</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-400">{fmtUct(totalClaimable)}</p>
-        </div>
-      </div>
+      <FundingPanel
+        availableBalance={availableBalance}
+        onDeposit={handleDeposit}
+        onWithdraw={handleWithdraw}
+      />
 
-      {pendingClaims.length > 0 && (
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold">Claim rewards</h2>
-          <div className="space-y-3">
-            {pendingClaims.map(c => (
-              <ClaimCard key={c.id} claim={c} onClaim={claimReward} />
-            ))}
-          </div>
-        </section>
-      )}
+      <div className="mb-10 mt-8 grid gap-4 sm:grid-cols-4">
+        <Stat label="Total value" value={fmtUct(portfolio?.total_portfolio_value ?? 0)} />
+        <Stat label="In positions" value={fmtUct(portfolio?.total_staked ?? 0)} />
+        <Stat
+          label="Unrealized PnL"
+          value={`${(portfolio?.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${fmtUct(portfolio?.unrealized_pnl ?? 0)}`}
+          accent={(portfolio?.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+        />
+        <Stat
+          label="Realized PnL"
+          value={`${(portfolio?.realized_pnl ?? 0) >= 0 ? '+' : ''}${fmtUct(portfolio?.realized_pnl ?? 0)}`}
+          accent={(portfolio?.realized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+        />
+      </div>
 
       <section className="mb-10">
         <h2 className="mb-4 text-lg font-semibold">Open positions</h2>
         {openPositions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center text-slate-500">
-            No open positions yet — stake on a market to get started
+            No open positions — deposit margin and trade on a market
           </div>
         ) : (
           <div className="space-y-3">
@@ -79,18 +108,27 @@ export function PortfolioPage({ identity }: { identity: WalletIdentity | null })
                     {p.outcome || p.side}
                   </span>
                 </div>
-                <div className="mt-3 flex gap-6 text-sm text-slate-400">
+                <div className="mt-3 flex flex-wrap gap-6 text-sm text-slate-400">
                   <span>Staked {fmtUct(p.stake_amount ?? p.cost_basis)}</span>
                   <span className={(p.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
                     PnL {(p.pnl ?? 0) >= 0 ? '+' : ''}{fmtUct(p.pnl ?? 0)}
                   </span>
-                  {(p.payout ?? 0) > 0 && <span>Payout {fmtUct(p.payout ?? 0)}</span>}
+                  {(p.payout ?? 0) > 0 && <span className="text-emerald-400">Won {fmtUct(p.payout ?? 0)}</span>}
                 </div>
               </div>
             ))}
           </div>
         )}
       </section>
+    </div>
+  )
+}
+
+function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-4">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`mt-1 text-lg font-bold ${accent || ''}`}>{value}</p>
     </div>
   )
 }

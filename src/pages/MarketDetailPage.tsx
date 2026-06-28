@@ -2,26 +2,19 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMarkets } from '../hooks/useMarkets'
 import { usePositions } from '../hooks/usePositions'
-import { useSpherePayment } from '../hooks/useSpherePayment'
 import type { Market, Outcome } from '../lib/types'
 import { fmtUct, noProbability, timeRemaining, yesProbability } from '../lib/format'
 
 type Props = {
   identity: import('../lib/types').WalletIdentity | null
-  wallet: {
-    sendPayment?: (p: { recipient: string; amountHuman: number; coinId?: string; memo?: string }) => Promise<unknown>
-    refreshBalance?: () => Promise<void>
-  }
-  treasuryAddress?: string
   onToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }
 
-export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }: Props) {
+export function MarketDetailPage({ identity, onToast }: Props) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { getMarket } = useMarkets({ autoLoad: false })
-  const { placeStake } = usePositions(identity)
-  const { stake } = useSpherePayment(wallet, treasuryAddress)
+  const { placeTrade, availableBalance, refresh } = usePositions(identity)
 
   const [market, setMarket] = useState<Market | null>(null)
   const [amount, setAmount] = useState('25')
@@ -31,6 +24,10 @@ export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }:
     if (!id) return
     getMarket(id).then(setMarket).catch(() => onToast('Market not found', 'error'))
   }, [id, getMarket, onToast])
+
+  useEffect(() => {
+    refresh().catch(() => {})
+  }, [refresh])
 
   if (!market) {
     return (
@@ -44,11 +41,16 @@ export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }:
   const yes = yesProbability(market)
   const no = noProbability(market)
   const isOpen = market.status === 'open' && new Date(market.deadline) > new Date()
+  const stakeAmount = parseFloat(amount) || 0
+  const insufficient = stakeAmount > availableBalance
 
   async function handleBuy(outcome: Outcome) {
-    const stakeAmount = parseFloat(amount)
     if (!stakeAmount || stakeAmount <= 0) {
       onToast('Enter a valid stake amount', 'error')
+      return
+    }
+    if (insufficient) {
+      onToast('Insufficient portfolio balance — deposit first', 'error')
       return
     }
     if (!isOpen) {
@@ -58,19 +60,11 @@ export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }:
 
     setLoading(outcome)
     try {
-      onToast('Approve payment in your Sphere wallet…', 'info')
-      const payment = await stake({ marketId: market!.id, outcome, amount: stakeAmount })
-      await placeStake({
-        marketId: market!.id,
-        outcome,
-        amount: stakeAmount,
-        txReference: payment.txReference,
-        memo: payment.memo,
-      })
-      onToast(`Position opened — ${outcome} ${fmtUct(stakeAmount)}`, 'success')
+      await placeTrade({ marketId: market!.id, outcome, amount: stakeAmount })
+      onToast(`Bought ${outcome} for ${fmtUct(stakeAmount)}`, 'success')
       navigate('/portfolio')
     } catch (e) {
-      onToast(e instanceof Error ? e.message : 'Stake failed', 'error')
+      onToast(e instanceof Error ? e.message : 'Trade failed', 'error')
     } finally {
       setLoading(null)
     }
@@ -95,7 +89,7 @@ export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }:
       <h1 className="text-2xl font-bold leading-tight sm:text-3xl">{market.question}</h1>
 
       {market.description && (
-        <p className="mt-4 text-slate-300 leading-relaxed">{market.description}</p>
+        <p className="mt-4 leading-relaxed text-slate-300">{market.description}</p>
       )}
 
       {market.resolution_criteria && (
@@ -123,6 +117,18 @@ export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }:
 
       {isOpen ? (
         <div className="mt-8 rounded-3xl border border-white/10 bg-[var(--color-surface-2)] p-6">
+          <div className="mb-4 flex items-center justify-between text-sm">
+            <span className="text-slate-400">Portfolio balance</span>
+            <span className="font-semibold">{fmtUct(availableBalance)}</span>
+          </div>
+
+          {availableBalance <= 0 && (
+            <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              Deposit funds to your portfolio before trading.{' '}
+              <Link to="/portfolio" className="font-medium underline">Go to Portfolio →</Link>
+            </div>
+          )}
+
           <label className="mb-2 block text-sm font-medium text-slate-400">Stake amount (UCT)</label>
           <input
             type="number"
@@ -136,32 +142,37 @@ export function MarketDetailPage({ identity, wallet, treasuryAddress, onToast }:
               <button
                 key={n}
                 onClick={() => setAmount(String(n))}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm transition hover:bg-white/5"
+                disabled={n > availableBalance}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm transition hover:bg-white/5 disabled:opacity-30"
               >
                 {n} UCT
               </button>
             ))}
           </div>
 
+          {insufficient && stakeAmount > 0 && (
+            <p className="mb-4 text-sm text-rose-400">Amount exceeds portfolio balance</p>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleBuy('YES')}
-              disabled={!!loading}
+              disabled={!!loading || insufficient || availableBalance <= 0}
               className="rounded-2xl bg-emerald-600 py-4 text-lg font-bold transition hover:bg-emerald-500 disabled:opacity-50"
             >
-              {loading === 'YES' ? 'Approving…' : 'Buy YES'}
+              {loading === 'YES' ? 'Placing…' : 'Buy YES'}
             </button>
             <button
               onClick={() => handleBuy('NO')}
-              disabled={!!loading}
+              disabled={!!loading || insufficient || availableBalance <= 0}
               className="rounded-2xl bg-rose-600 py-4 text-lg font-bold transition hover:bg-rose-500 disabled:opacity-50"
             >
-              {loading === 'NO' ? 'Approving…' : 'Buy NO'}
+              {loading === 'NO' ? 'Placing…' : 'Buy NO'}
             </button>
           </div>
 
           <p className="mt-4 text-center text-xs text-slate-500">
-            One tap opens Sphere — approve the payment and your position is created instantly.
+            Trades use your portfolio margin — instant, no wallet popup per trade.
           </p>
         </div>
       ) : (
