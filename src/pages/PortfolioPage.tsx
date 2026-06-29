@@ -36,8 +36,10 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
   const { depositToPortfolio } = useSpherePayment(wallet, platform.treasuryAddress)
 
   useEffect(() => {
-    setTab(tabFromParam(searchParams.get('tab')))
-  }, [searchParams])
+    const next = tabFromParam(searchParams.get('tab'))
+    setTab(next)
+    if (next === 'history') refreshHistory().catch(() => {})
+  }, [searchParams, refreshHistory])
 
   function selectTab(next: Tab) {
     setTab(next)

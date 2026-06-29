@@ -89,7 +89,23 @@ export async function fetchPortfolio(auth: AuthHeaders) {
 }
 
 export async function fetchHistory(auth: AuthHeaders) {
-  return invoke<{ history: HistoryEntry[] }>('/history', { auth })
+  try {
+    return await invoke<{ history: HistoryEntry[] }>('/history', { auth })
+  } catch {
+    // Production may run an older edge function without /history — use DB RPC instead.
+    if (!supabase) throw new Error('History unavailable — redeploy platform edge function')
+    const { data, error } = await supabase.rpc('get_wallet_history', {
+      p_wallet_address: auth.walletAddress,
+      p_nametag: auth.nametag ?? null,
+      p_direct_address: auth.directAddress ?? null,
+    })
+    if (error) throw new Error(
+      error.message.includes('get_wallet_history')
+        ? 'Run migration 004_wallet_history_rpc.sql in Supabase SQL Editor'
+        : error.message,
+    )
+    return { history: (Array.isArray(data) ? data : []) as HistoryEntry[] }
+  }
 }
 
 export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {

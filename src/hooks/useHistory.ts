@@ -16,8 +16,12 @@ export function useHistory(identity: WalletIdentity | null) {
     }
     try {
       const { history } = await api.fetchHistory(auth)
-      setEntries(history)
-      return history
+      setEntries(history ?? [])
+      return history ?? []
+    } catch (e) {
+      console.error('fetchHistory failed', e)
+      setEntries([])
+      return []
     } finally {
       setLoading(false)
     }
