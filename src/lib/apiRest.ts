@@ -85,7 +85,7 @@ export async function placeTrade(
   return request<{ portfolio: Portfolio }>('/trades', {
     method: 'POST',
     headers: authHeaders(auth),
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, side: payload.outcome }),
   })
 }
 

@@ -104,7 +104,11 @@ export async function placeTrade(
   auth: AuthHeaders,
   payload: { marketId: string; outcome: 'YES' | 'NO'; amount: number },
 ) {
-  return invoke<{ portfolio: Portfolio }>('/trades', { auth, payload })
+  // Older deployed edge functions expect `side`; send both for compatibility.
+  return invoke<{ portfolio: Portfolio }>('/trades', {
+    auth,
+    payload: { ...payload, side: payload.outcome },
+  })
 }
 
 export async function adminCreateMarket(
