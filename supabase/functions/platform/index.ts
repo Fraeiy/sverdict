@@ -139,15 +139,22 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
     }
   })
 
-  const resolvedPositions = settled.map(p => ({
-    ...p,
-    outcome: p.side,
-    shares: Number(p.shares ?? p.quantity),
-    stake_amount: Number(p.stake_amount ?? p.cost_basis),
-    market: marketMap.get(String(p.market_id)),
-  }))
+  const resolvedPositions = settled.map(p => {
+    const stake = Number(p.stake_amount ?? p.cost_basis ?? 0)
+    const payout = Number(p.payout ?? 0)
+    const pnl = p.pnl != null && p.pnl !== '' ? Number(p.pnl) : payout - stake
+    return {
+      ...p,
+      outcome: p.side,
+      shares: Number(p.shares ?? p.quantity),
+      stake_amount: stake,
+      payout,
+      pnl,
+      market: marketMap.get(String(p.market_id)),
+    }
+  })
 
-  const realizedPnl = settled.reduce((s, p) => s + Number(p.pnl || 0), 0)
+  const realizedPnl = resolvedPositions.reduce((s, p) => s + Number(p.pnl || 0), 0)
   const totalStaked = openWithValue.reduce((s, p) => s + Number(p.stake_amount ?? p.cost_basis), 0)
   const estimatedValue = openWithValue.reduce((s, p) => s + Number(p.current_value || 0), 0)
   const positionsValue = estimatedValue

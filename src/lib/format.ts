@@ -1,4 +1,14 @@
-import type { Market } from './types'
+import type { Market, Position } from './types'
+
+/** Net profit/loss for a settled position (payout minus stake). */
+export function realizedPnl(position: Pick<Position, 'pnl' | 'payout' | 'stake_amount' | 'cost_basis'>): number {
+  const stake = Number(position.stake_amount ?? position.cost_basis ?? 0)
+  const payout = Number(position.payout ?? 0)
+  if (position.pnl != null && !Number.isNaN(Number(position.pnl))) {
+    return Number(position.pnl)
+  }
+  return payout - stake
+}
 
 export function fmtUct(n: number) {
   return `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} UCT`

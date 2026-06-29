@@ -8,7 +8,7 @@ import { usePositions } from '../hooks/usePositions'
 import { useSpherePayment } from '../hooks/useSpherePayment'
 import { usePlatform } from '../hooks/usePlatform'
 import type { WalletIdentity } from '../lib/types'
-import { fmtUct } from '../lib/format'
+import { fmtUct, realizedPnl } from '../lib/format'
 
 type Tab = 'overview' | 'positions' | 'history'
 
@@ -181,25 +181,36 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
                 <p className="text-sm text-slate-500">No resolved positions yet</p>
               ) : (
                 <div className="space-y-3">
-                  {resolvedPositions.map(p => (
-                    <div key={p.id} className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-5 opacity-80">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="font-medium">{p.market?.question || p.market_id}</p>
-                        <span className={`rounded-lg px-2 py-1 text-xs font-bold ${
-                          (p.outcome || p.side) === 'YES' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                        }`}>
-                          {p.outcome || p.side}
-                        </span>
+                  {resolvedPositions.map(p => {
+                    const stake = Number(p.stake_amount ?? p.cost_basis ?? 0)
+                    const payout = Number(p.payout ?? 0)
+                    const net = realizedPnl(p)
+                    const won = payout > 0
+                    return (
+                      <div key={p.id} className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-5 opacity-80">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-medium">{p.market?.question || p.market_id}</p>
+                          <span className={`rounded-lg px-2 py-1 text-xs font-bold ${
+                            (p.outcome || p.side) === 'YES' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                          }`}>
+                            {p.outcome || p.side}
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-6 text-sm text-slate-400">
+                          <span>Staked {fmtUct(stake)}</span>
+                          {won && <span className="text-slate-300">Payout {fmtUct(payout)}</span>}
+                          <span className={net >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                            Net PnL {net >= 0 ? '+' : ''}{fmtUct(net)}
+                          </span>
+                        </div>
+                        {won && net === 0 && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            Outcome won — returned your stake (no opposing bets in the pool).
+                          </p>
+                        )}
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-6 text-sm text-slate-400">
-                        <span>Staked {fmtUct(p.stake_amount ?? p.cost_basis)}</span>
-                        <span className={(p.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                          PnL {(p.pnl ?? 0) >= 0 ? '+' : ''}{fmtUct(p.pnl ?? 0)}
-                        </span>
-                        {(p.payout ?? 0) > 0 && <span className="text-emerald-400">Won {fmtUct(p.payout ?? 0)}</span>}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </section>
