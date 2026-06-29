@@ -43,7 +43,7 @@ export default function App() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <p className="text-slate-400">Wallet locked. Unlock in Sphere and reconnect.</p>
-          <button onClick={wallet.connect} className="mt-4 rounded-xl bg-blue-600 px-6 py-3 font-semibold">
+          <button onClick={wallet.connect} className="btn-gold mt-4 rounded-lg px-6 py-3 font-data text-xs uppercase tracking-wider">
             Reconnect
           </button>
         </div>

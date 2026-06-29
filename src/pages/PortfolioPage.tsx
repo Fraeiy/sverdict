@@ -75,7 +75,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
 
   if (loading && !portfolio) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-16 text-center text-slate-400">
+      <div className="mx-auto max-w-4xl px-4 py-16 text-center font-data text-sm text-[var(--color-muted)]">
         Loading portfolio…
       </div>
     )
@@ -87,11 +87,14 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
     { id: 'history', label: 'History' },
   ]
 
+  const totalPnl = portfolio?.total_pnl ?? 0
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8">
+        <p className="label-caps mb-2">Account</p>
         <h1 className="text-3xl font-bold">Portfolio</h1>
-        <p className="mt-2 text-slate-400">Margin balance, positions, and activity</p>
+        <p className="mt-2 text-[var(--color-text-2)]">Margin, positions, and settlement history</p>
       </div>
 
       <FundingPanel
@@ -100,20 +103,16 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
         onWithdraw={handleWithdraw}
       />
 
-      <div className="mt-8 flex gap-1 border-b border-white/10">
+      <div className="tab-nav mt-8 flex gap-1">
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => selectTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
-              tab === t.id
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-slate-500 hover:text-white'
-            }`}
+            className={`tab-item flex items-center gap-2 ${tab === t.id ? 'tab-item-active' : ''}`}
           >
             {t.label}
             {t.badge ? (
-              <span className="rounded-full bg-blue-600/30 px-2 py-0.5 text-xs font-bold text-blue-300">
+              <span className="rounded bg-[rgba(212,168,67,0.2)] px-1.5 py-0.5 font-data text-[9px] text-[var(--color-gold)]">
                 {t.badge}
               </span>
             ) : null}
@@ -125,30 +124,31 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
         {tab === 'overview' && (
           <div className="space-y-8">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat label="Total value" value={fmtUct(portfolio?.total_portfolio_value ?? 0)} />
+              <Stat label="Total value" value={fmtUct(portfolio?.total_portfolio_value ?? 0)} gold />
               <Stat label="Available" value={fmtUct(availableBalance)} />
               <Stat label="In positions" value={fmtUct(portfolio?.total_staked ?? 0)} />
               <Stat
                 label="Total PnL"
-                value={`${(portfolio?.total_pnl ?? 0) >= 0 ? '+' : ''}${fmtUct(portfolio?.total_pnl ?? 0)}`}
-                accent={(portfolio?.total_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+                value={`${totalPnl >= 0 ? '+' : ''}${fmtUct(totalPnl)}`}
+                yes={totalPnl >= 0}
+                no={totalPnl < 0}
               />
             </div>
 
             <section>
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Open positions</h2>
+                <h2 className="font-data text-xs font-bold uppercase tracking-wider text-[var(--color-text)]">Open positions</h2>
                 {openPositions.length > 0 && (
                   <button
                     onClick={() => selectTab('positions')}
-                    className="text-sm text-blue-400 hover:text-blue-300"
+                    className="font-data text-[10px] text-[var(--color-gold)] hover:underline"
                   >
-                    View all →
+                    VIEW ALL →
                   </button>
                 )}
               </div>
               {openPositions.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 py-10 text-center text-slate-500">
+                <div className="card rounded-xl border-dashed py-10 text-center font-data text-sm text-[var(--color-muted)]">
                   No open positions — deposit margin and trade on a market
                 </div>
               ) : (
@@ -163,9 +163,9 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
         {tab === 'positions' && (
           <div className="space-y-10">
             <section>
-              <h2 className="mb-4 text-lg font-semibold">Open positions</h2>
+              <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Open positions</h2>
               {openPositions.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center text-slate-500">
+                <div className="card rounded-xl border-dashed py-12 text-center font-data text-sm text-[var(--color-muted)]">
                   No open positions — deposit margin and trade on a market
                 </div>
               ) : (
@@ -176,9 +176,9 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
             </section>
 
             <section>
-              <h2 className="mb-4 text-lg font-semibold">Resolved positions</h2>
+              <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Resolved positions</h2>
               {resolvedPositions.length === 0 ? (
-                <p className="text-sm text-slate-500">No resolved positions yet</p>
+                <p className="font-data text-sm text-[var(--color-muted)]">No resolved positions yet</p>
               ) : (
                 <div className="space-y-3">
                   {resolvedPositions.map(p => {
@@ -187,25 +187,23 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
                     const net = realizedPnl(p)
                     const won = payout > 0
                     return (
-                      <div key={p.id} className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-5 opacity-80">
+                      <div key={p.id} className="card p-5 opacity-90">
                         <div className="flex items-center justify-between gap-3">
                           <p className="font-medium">{p.market?.question || p.market_id}</p>
-                          <span className={`rounded-lg px-2 py-1 text-xs font-bold ${
-                            (p.outcome || p.side) === 'YES' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                          }`}>
+                          <span className={`chip ${(p.outcome || p.side) === 'YES' ? 'chip-yes' : 'chip-no'}`}>
                             {p.outcome || p.side}
                           </span>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-6 text-sm text-slate-400">
-                          <span>Staked {fmtUct(stake)}</span>
-                          {won && <span className="text-slate-300">Payout {fmtUct(payout)}</span>}
-                          <span className={net >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                        <div className="mt-3 flex flex-wrap gap-6 font-data text-[11px] text-[var(--color-text-2)]">
+                          <span>Staked <span className="text-[var(--color-text)]">{fmtUct(stake)}</span></span>
+                          {won && <span>Payout <span className="text-[var(--color-gold)]">{fmtUct(payout)}</span></span>}
+                          <span className={net >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}>
                             Net PnL {net >= 0 ? '+' : ''}{fmtUct(net)}
                           </span>
                         </div>
                         {won && net === 0 && (
-                          <p className="mt-2 text-xs text-slate-500">
-                            Outcome won — returned your stake (no opposing bets in the pool).
+                          <p className="mt-2 font-data text-[10px] text-[var(--color-muted)]">
+                            Outcome won — returned stake (no opposing pool liquidity).
                           </p>
                         )}
                       </div>
@@ -225,11 +223,19 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
   )
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Stat({ label, value, gold, yes, no }: {
+  label: string
+  value: string
+  gold?: boolean
+  yes?: boolean
+  no?: boolean
+}) {
   return (
-    <div className="rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={`mt-1 text-lg font-bold ${accent || ''}`}>{value}</p>
+    <div className="stat-block">
+      <p className="label-caps">{label}</p>
+      <p className={`stat-value mt-2 ${gold ? 'stat-value-gold' : yes ? 'stat-value-yes' : no ? 'stat-value-no' : ''}`}>
+        {value}
+      </p>
     </div>
   )
 }

@@ -26,24 +26,24 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
   }
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-blue-600/10 to-indigo-600/5 p-6">
+    <div className="card card-glow p-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-400">Portfolio balance</p>
-          <p className="mt-1 text-3xl font-bold">{fmtUct(availableBalance)}</p>
-          <p className="mt-1 text-xs text-slate-500">Deposit margin to trade · Withdraw profits anytime</p>
+          <p className="label-caps">Available margin</p>
+          <p className="mt-2 font-data text-3xl font-bold text-[var(--color-gold)]">{fmtUct(availableBalance)}</p>
+          <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">Deposit to trade · Queue withdrawal anytime</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => { setMode('deposit'); setAmount('50') }}
-            className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold transition hover:bg-blue-500"
+            className="btn-gold rounded-lg px-5 py-2.5 font-data text-[11px] uppercase tracking-wider"
           >
             Deposit
           </button>
           <button
             onClick={() => { setMode('withdraw'); setAmount(String(availableBalance || '')) }}
             disabled={availableBalance <= 0}
-            className="rounded-xl border border-white/15 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/5 disabled:opacity-40"
+            className="btn-ghost rounded-lg px-5 py-2.5 font-data text-[11px] uppercase tracking-wider disabled:opacity-40"
           >
             Withdraw
           </button>
@@ -51,17 +51,17 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
       </div>
 
       {mode && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-[var(--color-surface-2)] p-5">
-          <p className="mb-3 font-medium">
+        <div className="mt-6 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] p-5">
+          <p className="font-data text-xs font-bold uppercase tracking-wider text-[var(--color-text)]">
             {mode === 'deposit' ? 'Deposit to portfolio' : 'Withdraw to Sphere wallet'}
           </p>
           {mode === 'deposit' ? (
-            <p className="mb-4 text-sm text-slate-400">
-              Approve a one-time Sphere transfer. Funds appear in your portfolio instantly — no addresses to copy.
+            <p className="mb-4 mt-2 text-sm text-[var(--color-text-2)]">
+              Approve a one-time Sphere transfer. Funds appear in your portfolio instantly.
             </p>
           ) : (
-            <p className="mb-4 text-sm text-slate-400">
-              Available: {fmtUct(availableBalance)}. Funds are sent from the @sphere-predict treasury to your Sphere wallet — usually within a few minutes after you request.
+            <p className="mb-4 mt-2 text-sm text-[var(--color-text-2)]">
+              Available: {fmtUct(availableBalance)}. Treasury sends from @sphere-predict after you queue.
             </p>
           )}
           <input
@@ -69,19 +69,19 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
             min="1"
             value={amount}
             onChange={e => setAmount(e.target.value)}
-            className="mb-4 w-full rounded-xl border border-white/10 bg-[var(--color-surface-3)] px-4 py-3 text-lg font-semibold outline-none"
+            className="input-pro mb-4 w-full rounded-lg px-4 py-3 text-lg font-bold"
           />
           <div className="flex gap-2">
             <button
               onClick={submit}
               disabled={loading}
-              className={`flex-1 rounded-xl py-3 font-semibold transition disabled:opacity-50 ${
-                mode === 'deposit' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-white/10 hover:bg-white/15'
+              className={`flex-1 rounded-lg py-3 font-data text-xs font-bold uppercase tracking-wider transition disabled:opacity-50 ${
+                mode === 'deposit' ? 'btn-gold' : 'btn-ghost'
               }`}
             >
               {loading ? 'Processing…' : mode === 'deposit' ? 'Approve in Sphere' : 'Queue withdrawal'}
             </button>
-            <button onClick={() => setMode(null)} className="rounded-xl px-4 py-3 text-slate-400 hover:text-white">
+            <button onClick={() => setMode(null)} className="btn-ghost rounded-lg px-4 py-3 font-data text-[10px]">
               Cancel
             </button>
           </div>

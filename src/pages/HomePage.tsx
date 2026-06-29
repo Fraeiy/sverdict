@@ -17,13 +17,24 @@ export function HomePage() {
     load({ search: s || undefined, category: c, status: st, trending: true }).catch(() => {})
   }
 
+  const openCount = markets.filter(m => m.status === 'open').length
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <section className="mb-10">
-        <p className="mb-2 text-sm font-medium text-blue-400">Prediction markets on Sphere</p>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">What do you think happens next?</h1>
-        <p className="mt-3 max-w-2xl text-slate-400">
-          Pick a market, choose YES or NO, approve once in Sphere — your position is live instantly.
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="chip chip-gold">Live markets</span>
+          <span className="flex items-center gap-2 font-data text-[10px] text-[var(--color-muted)]">
+            <span className="live-dot" />
+            {openCount} open · Sphere testnet
+          </span>
+        </div>
+        <h1 className="max-w-3xl text-3xl font-bold tracking-tight sm:text-4xl lg:text-[2.75rem] lg:leading-tight">
+          Agentic prediction markets at{' '}
+          <span className="text-[var(--color-gold)]">machine speed</span>
+        </h1>
+        <p className="mt-4 max-w-2xl text-[var(--color-text-2)]">
+          Stake UCT on real outcomes. Portfolio margin, instant execution, cryptographic settlement on Unicity Sphere.
         </p>
       </section>
 
@@ -35,15 +46,15 @@ export function HomePage() {
             applyFilters({ search: e.target.value })
           }}
           placeholder="Search markets…"
-          className="flex-1 rounded-2xl border border-white/10 bg-[var(--color-surface-2)] px-4 py-3 outline-none transition focus:border-blue-500/50"
+          className="input-pro flex-1 rounded-lg px-4 py-3 text-sm"
         />
         <div className="flex flex-wrap gap-2">
           {['open', 'closed', 'resolved', 'all'].map(s => (
             <button
               key={s}
               onClick={() => { setStatus(s); applyFilters({ status: s }) }}
-              className={`rounded-xl px-4 py-2 text-sm font-medium capitalize transition ${
-                status === s ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white'
+              className={`chip capitalize transition ${
+                status === s ? 'chip-gold' : 'chip-neutral hover:border-[rgba(212,168,67,0.3)]'
               }`}
             >
               {s}
@@ -57,8 +68,10 @@ export function HomePage() {
           <button
             key={c}
             onClick={() => { setCategory(c); applyFilters({ category: c }) }}
-            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
-              category === c ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'
+            className={`rounded-full px-4 py-1.5 font-data text-[10px] font-bold uppercase tracking-wider transition ${
+              category === c
+                ? 'bg-[var(--color-gold)] text-[#0a0a08]'
+                : 'border border-[var(--color-border)] text-[var(--color-text-2)] hover:border-[rgba(212,168,67,0.35)] hover:text-[var(--color-gold)]'
             }`}
           >
             {c}
@@ -69,11 +82,11 @@ export function HomePage() {
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="h-48 animate-pulse rounded-2xl bg-white/5" />
+            <div key={i} className="h-52 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-3)]" />
           ))}
         </div>
       ) : markets.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 py-16 text-center text-slate-500">
+        <div className="card rounded-xl border-dashed py-16 text-center font-data text-sm text-[var(--color-muted)]">
           No markets match your filters
         </div>
       ) : (

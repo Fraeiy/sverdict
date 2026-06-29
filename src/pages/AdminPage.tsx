@@ -95,7 +95,7 @@ export function AdminPage({ identity, onToast }: Props) {
 
   if (!platform.isAdmin) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-16 text-center text-slate-400">
+      <div className="mx-auto max-w-4xl px-4 py-16 text-center font-data text-sm text-[var(--color-muted)]">
         Admin access required — connect with the @sphere-predict treasury wallet.
       </div>
     )
@@ -103,10 +103,11 @@ export function AdminPage({ identity, onToast }: Props) {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
+      <p className="label-caps mb-2">Operations</p>
       <h1 className="text-3xl font-bold">Admin</h1>
-      <p className="mt-2 text-slate-400">Create markets, resolve outcomes, and fulfill withdrawals</p>
+      <p className="mt-2 text-[var(--color-text-2)]">Create markets, resolve outcomes, and fulfill withdrawals</p>
 
-      <div className="mt-8 rounded-3xl border border-amber-500/20 bg-amber-500/5 p-6">
+      <div className="card mt-8 border-[rgba(212,168,67,0.25)] p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Pending withdrawals</h2>
@@ -117,7 +118,7 @@ export function AdminPage({ identity, onToast }: Props) {
           <button
             onClick={() => loadPendingWithdrawals()}
             disabled={withdrawalsLoading}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs hover:bg-white/5 disabled:opacity-50"
+            className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
           >
             Refresh
           </button>
@@ -134,7 +135,7 @@ export function AdminPage({ identity, onToast }: Props) {
               return (
                 <div
                   key={w.id}
-                  className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-4"
+                  className="card flex flex-wrap items-center gap-3 p-4"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{fmtUct(w.amount)}</p>
@@ -145,7 +146,7 @@ export function AdminPage({ identity, onToast }: Props) {
                   <button
                     onClick={() => fulfillWithdrawal(w)}
                     disabled={fulfillingId === w.id}
-                    className="rounded-lg bg-amber-600/20 px-4 py-2 text-sm font-medium text-amber-300 hover:bg-amber-600/30 disabled:opacity-50"
+                    className="btn-gold rounded-md px-4 py-2 font-data text-[10px] uppercase tracking-wider disabled:opacity-50"
                   >
                     {fulfillingId === w.id ? 'Saving…' : 'Mark sent'}
                   </button>
@@ -156,26 +157,26 @@ export function AdminPage({ identity, onToast }: Props) {
         )}
       </div>
 
-      <div className="mt-8 rounded-3xl border border-white/10 bg-[var(--color-surface-2)] p-6">
-        <h2 className="mb-4 text-lg font-semibold">Create market</h2>
+      <div className="card mt-8 p-6">
+        <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Create market</h2>
         <div className="space-y-4">
           <input
             value={question}
             onChange={e => setQuestion(e.target.value)}
             placeholder="Market title / question"
-            className="w-full rounded-xl border border-white/10 bg-[var(--color-surface-3)] px-4 py-3 outline-none focus:border-blue-500/50"
+            className="input-pro w-full rounded-lg px-4 py-3 text-sm"
           />
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             placeholder="Description (optional)"
-            className="min-h-[80px] w-full rounded-xl border border-white/10 bg-[var(--color-surface-3)] px-4 py-3 outline-none focus:border-blue-500/50"
+            className="input-pro min-h-[80px] w-full rounded-lg px-4 py-3 text-sm"
           />
           <textarea
             value={criteria}
             onChange={e => setCriteria(e.target.value)}
             placeholder="Resolution criteria"
-            className="min-h-[80px] w-full rounded-xl border border-white/10 bg-[var(--color-surface-3)] px-4 py-3 outline-none focus:border-blue-500/50"
+            className="input-pro min-h-[80px] w-full rounded-lg px-4 py-3 text-sm"
           />
           <div className="flex flex-wrap gap-3">
             <select
@@ -196,7 +197,7 @@ export function AdminPage({ identity, onToast }: Props) {
           </div>
           <button
             onClick={createMarket}
-            className="rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500"
+            className="btn-gold rounded-lg px-6 py-3 font-data text-xs uppercase tracking-wider"
           >
             Create market
           </button>
@@ -207,7 +208,7 @@ export function AdminPage({ identity, onToast }: Props) {
         <h2 className="mb-4 text-lg font-semibold">Active markets</h2>
         <div className="space-y-3">
           {activeMarkets.map(m => (
-            <div key={m.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-4">
+            <div key={m.id} className="card flex flex-wrap items-center gap-3 p-4">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{m.question}</p>
                 <p className="text-xs text-slate-500">{m.status} · {timeRemaining(m.deadline)}</p>
@@ -222,13 +223,13 @@ export function AdminPage({ identity, onToast }: Props) {
               )}
               <button
                 onClick={() => platform.resolveMarket(m.id, 'YES').then(() => { load({ trending: true }); onToast('Resolved YES') })}
-                className="rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-600/30"
+                className="chip chip-yes cursor-pointer px-3 py-1.5"
               >
                 Resolve YES
               </button>
               <button
                 onClick={() => platform.resolveMarket(m.id, 'NO').then(() => { load({ trending: true }); onToast('Resolved NO') })}
-                className="rounded-lg bg-rose-600/20 px-3 py-1.5 text-xs font-medium text-rose-400 hover:bg-rose-600/30"
+                className="chip chip-no cursor-pointer px-3 py-1.5"
               >
                 Resolve NO
               </button>

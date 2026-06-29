@@ -16,9 +16,9 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <div className="text-center">
-          <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-          <h1 className="text-2xl font-bold">Sphere Predict</h1>
-          <p className="mt-2 text-slate-400">Connecting to your Sphere wallet…</p>
+          <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-2 border-[var(--color-gold)] border-t-transparent" />
+          <p className="font-data text-sm font-bold tracking-[0.15em] text-[var(--color-gold)]">SPHERE_PREDICT</p>
+          <p className="mt-3 font-data text-xs text-[var(--color-text-2)]">Establishing wallet connection…</p>
         </div>
       </div>
     )
@@ -26,14 +26,15 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[var(--color-surface-2)] p-8 shadow-2xl">
+      <div className="card card-glow w-full max-w-md p-8">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-2xl font-black">
-            S
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl border border-[rgba(212,168,67,0.4)] bg-[rgba(212,168,67,0.08)]">
+            <span className="font-data text-xl font-bold text-[var(--color-gold)]">SP</span>
           </div>
+          <p className="label-caps mb-2">Unicity · Sphere</p>
           <h1 className="text-3xl font-bold tracking-tight">Trade the future</h1>
-          <p className="mt-3 text-sm leading-relaxed text-slate-400">
-            Connect once with Sphere. Deposit margin to your portfolio, trade instantly, withdraw anytime.
+          <p className="mt-3 text-sm leading-relaxed text-[var(--color-text-2)]">
+            Deposit margin, execute instant positions, and withdraw on your terms — all native to Sphere.
           </p>
         </div>
 
@@ -41,7 +42,7 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
           <button
             onClick={() => setShowMethods(true)}
             disabled={wallet.isConnecting}
-            className="w-full rounded-2xl bg-blue-600 py-4 text-base font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+            className="btn-gold w-full rounded-lg py-4 font-data text-sm uppercase tracking-wider disabled:opacity-50"
           >
             Continue with Sphere
           </button>
@@ -50,30 +51,32 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
             <button
               onClick={wallet.connect}
               disabled={wallet.isConnecting}
-              className="w-full rounded-2xl bg-blue-600 py-4 font-semibold transition hover:bg-blue-500"
+              className="btn-gold w-full rounded-lg py-4 font-data text-sm uppercase tracking-wider"
             >
               {wallet.isConnecting ? 'Connecting…' : 'Connect wallet'}
             </button>
             {wallet.extensionInstalled && (
               <button
                 onClick={wallet.connectViaExtension}
-                className="w-full rounded-2xl border border-white/10 py-4 font-medium transition hover:bg-white/5"
+                className="btn-ghost w-full rounded-lg py-4 font-data text-xs uppercase tracking-wider"
               >
-                Use browser extension
+                Browser extension
               </button>
             )}
-            <button onClick={() => setShowMethods(false)} className="w-full py-2 text-sm text-slate-500">
-              Back
+            <button onClick={() => setShowMethods(false)} className="w-full py-2 font-data text-[10px] text-[var(--color-muted)]">
+              ← Back
             </button>
           </div>
         )}
 
-        {wallet.error && <p className="mt-4 text-center text-sm text-red-400">{wallet.error}</p>}
+        {wallet.error && <p className="mt-4 text-center font-data text-xs text-[var(--color-no)]">{wallet.error}</p>}
 
-        <div className="mt-8 grid grid-cols-3 gap-3 text-center text-xs text-slate-500">
-          <div className="rounded-xl bg-white/5 p-3">Portfolio margin</div>
-          <div className="rounded-xl bg-white/5 p-3">Instant trades</div>
-          <div className="rounded-xl bg-white/5 p-3">Easy withdraw</div>
+        <div className="mt-8 grid grid-cols-3 gap-2">
+          {['Margin', 'Instant', 'Withdraw'].map(label => (
+            <div key={label} className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] p-3 text-center">
+              <p className="font-data text-[9px] font-bold uppercase tracking-wider text-[var(--color-gold)]">{label}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>

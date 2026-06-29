@@ -10,34 +10,36 @@ export function MarketCard({ market }: { market: Market }) {
   return (
     <Link
       to={`/markets/${market.id}`}
-      className="group block rounded-2xl border border-white/8 bg-[var(--color-surface-2)] p-5 transition hover:border-blue-500/40 hover:bg-[var(--color-surface-3)]"
+      className="card card-hover card-glow group block p-5"
     >
-      <div className="mb-3 flex items-center gap-2 text-xs">
-        <span className={`rounded-full px-2 py-0.5 font-medium ${
-          market.status === 'open' ? 'bg-emerald-500/15 text-emerald-400' :
-          market.status === 'resolved' ? 'bg-amber-500/15 text-amber-400' :
-          'bg-slate-500/15 text-slate-400'
+      <div className="mb-3 flex items-center gap-2">
+        <span className={`chip ${
+          market.status === 'open' ? 'chip-open' :
+          market.status === 'resolved' ? 'chip-gold' :
+          'chip-neutral'
         }`}>
           {market.status}
         </span>
-        <span className="text-slate-500">{market.category}</span>
-        {trending && <span className="ml-auto font-medium text-amber-400">Trending</span>}
+        <span className="font-data text-[10px] text-[var(--color-muted)]">{market.category}</span>
+        {trending && (
+          <span className="ml-auto font-data text-[10px] font-bold text-[var(--color-gold)]">▲ TRENDING</span>
+        )}
       </div>
 
-      <h3 className="mb-4 line-clamp-2 text-base font-semibold leading-snug group-hover:text-white">
+      <h3 className="mb-4 line-clamp-2 text-base font-semibold leading-snug text-[var(--color-text)] group-hover:text-[var(--color-gold-bright)]">
         {market.question}
       </h3>
 
-      <div className="mb-2 flex justify-between text-sm font-medium">
-        <span className="text-emerald-400">YES {yes}%</span>
-        <span className="text-rose-400">NO {no}%</span>
+      <div className="mb-2 flex justify-between font-data text-[11px] font-bold">
+        <span className="text-[var(--color-yes)]">YES {yes}%</span>
+        <span className="text-[var(--color-no)]">NO {no}%</span>
       </div>
-      <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/5">
-        <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${yes}%` }} />
+      <div className="odds-track mb-4">
+        <div className="odds-fill" style={{ width: `${yes}%` }} />
       </div>
 
-      <div className="flex justify-between text-xs text-slate-400">
-        <span>Vol {fmtUct(market.volume || 0)}</span>
+      <div className="flex justify-between border-t border-[var(--color-border)] pt-3 font-data text-[10px] text-[var(--color-muted)]">
+        <span>VOL <span className="text-[var(--color-gold)]">{fmtUct(market.volume || 0)}</span></span>
         <span>{timeRemaining(market.deadline)}</span>
       </div>
     </Link>

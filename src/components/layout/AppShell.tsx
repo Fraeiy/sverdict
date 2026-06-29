@@ -16,24 +16,33 @@ const NAV = [
 export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Props) {
   const location = useLocation()
 
+  function navActive(to: string) {
+    if (to === '/') return location.pathname === '/'
+    return location.pathname.startsWith(to)
+  }
+
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--color-surface)]">
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-[var(--color-surface)]/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
-          <Link to="/" className="flex items-center gap-2 font-bold tracking-tight">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-black">S</span>
-            <span>Sphere Predict</span>
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface)]/92 backdrop-blur-xl">
+        <div className="mx-auto flex h-[58px] max-w-6xl items-center gap-6 px-4">
+          <Link to="/" className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[rgba(212,168,67,0.35)] bg-[rgba(212,168,67,0.1)] font-data text-xs font-bold text-[var(--color-gold)]">
+              SP
+            </span>
+            <span className="font-data text-sm font-bold tracking-[0.12em] text-[var(--color-gold)]">
+              SPHERE<span className="text-[var(--color-muted)]">_PREDICT</span>
+            </span>
           </Link>
 
-          <nav className="hidden items-center gap-1 sm:flex">
+          <nav className="hidden items-center sm:flex">
             {NAV.map(item => (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                  location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to))
-                    ? 'bg-white/10 text-white'
-                    : 'text-slate-400 hover:text-white'
+                className={`px-4 py-4 font-data text-[11px] font-bold uppercase tracking-[0.08em] transition border-b-2 -mb-px ${
+                  navActive(item.to)
+                    ? 'border-[var(--color-gold)] text-[var(--color-gold)]'
+                    : 'border-transparent text-[var(--color-text-2)] hover:text-[var(--color-text)]'
                 }`}
               >
                 {item.label}
@@ -42,8 +51,10 @@ export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Prop
             {isAdmin && (
               <Link
                 to="/admin"
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                  location.pathname === '/admin' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
+                className={`px-4 py-4 font-data text-[11px] font-bold uppercase tracking-[0.08em] transition border-b-2 -mb-px ${
+                  navActive('/admin')
+                    ? 'border-[var(--color-gold)] text-[var(--color-gold)]'
+                    : 'border-transparent text-[var(--color-text-2)] hover:text-[var(--color-text)]'
                 }`}
               >
                 Admin
@@ -51,14 +62,19 @@ export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Prop
             )}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <div className="hidden text-right sm:block">
-              <p className="font-medium text-white">{displayName(identity)}</p>
-              <p className="text-xs text-slate-400">{balanceHuman === '—' ? '—' : `${balanceHuman} UCT`}</p>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 sm:flex">
+              <span className="live-dot" />
+              <div className="text-right">
+                <p className="font-data text-[11px] font-bold text-[var(--color-text)]">{displayName(identity)}</p>
+                <p className="font-data text-[10px] text-[var(--color-gold)]">
+                  {balanceHuman === '—' ? '—' : `${balanceHuman} UCT`}
+                </p>
+              </div>
             </div>
             <button
               onClick={onDisconnect}
-              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-400 transition hover:border-white/20 hover:text-white"
+              className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] font-bold uppercase tracking-wider"
             >
               Disconnect
             </button>
@@ -69,6 +85,12 @@ export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Prop
       <main className="flex-1">
         <Outlet />
       </main>
+
+      <footer className="border-t border-[var(--color-border)] py-4">
+        <p className="text-center font-data text-[10px] tracking-wider text-[var(--color-muted)]">
+          POWERED BY <span className="text-[var(--color-gold)]">UNICITY</span> · SPHERE TESTNET
+        </p>
+      </footer>
     </div>
   )
 }
