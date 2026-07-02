@@ -20,6 +20,8 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
       if (mode === 'deposit') await onDeposit(n)
       else if (mode === 'withdraw') await onWithdraw(n)
       setMode(null)
+    } catch {
+      // Parent shows toast; avoid uncaught promise on button click
     } finally {
       setLoading(false)
     }

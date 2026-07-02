@@ -78,7 +78,10 @@ async function findOrCreateUser(db: SupabaseClient, auth: WalletAuth) {
     }).select().single()
     if (error) throw error
     user = data
-    await db.from('balances').insert({ user_id: user.id, available_balance: 0 }).catch(() => {})
+    const { error: balInitErr } = await db.from('balances').insert({ user_id: user.id, available_balance: 0 })
+    if (balInitErr && !balInitErr.message.includes('duplicate')) {
+      console.error('balance init failed:', balInitErr.message)
+    }
   } else {
     const updates: Record<string, string | null> = {}
     if (auth.nametag && !user.nametag) updates.nametag = auth.nametag
@@ -390,16 +393,17 @@ Deno.serve(async (req) => {
     if (route === '/deposits' && req.method === 'POST') {
       const amount = Number(payload.amount)
       if (!amount || amount <= 0) throw new Error('Invalid deposit amount')
-      const bal = await getBalance(db, user.id)
-      await setBalance(db, user.id, bal + amount)
-      await db.from('deposits').insert({
+      const { error: depErr } = await db.from('deposits').insert({
         user_id: user.id,
         amount,
         tx_reference: payload.txReference || null,
         status: 'confirmed',
         confirmed_at: new Date().toISOString(),
-      }).catch(() => {})
-      await notify(db, user.id, 'deposit', 'Deposit confirmed', `${amount.toFixed(2)} UCT added to your portfolio.`, { amount })
+      })
+      if (depErr) throw new Error(`Failed to record deposit: ${depErr.message}`)
+      const bal = await getBalance(db, user.id)
+      await setBalance(db, user.id, bal + amount)
+      await notify(db, user.id, 'deposit', 'Deposit confirmed', `${amount.toFixed(2)} UCT added to your portfolio.`, { amount }).catch(() => {})
       return json({ portfolio: await getPortfolio(db, user.id) })
     }
 

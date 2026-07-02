@@ -19,8 +19,11 @@ async function invoke<T>(route: string, init?: { method?: string; payload?: unkn
     body: { route, payload: init?.payload ?? {} },
     headers: walletHeaders(init?.auth),
   })
-  if (error) throw new Error(error.message || 'Supabase function error')
-  if (data?.error) throw new Error(data.error)
+  const payload = data as { error?: string } | null
+  if (error) {
+    throw new Error(payload?.error || error.message || 'Supabase function error')
+  }
+  if (payload?.error) throw new Error(payload.error)
   return data as T
 }
 

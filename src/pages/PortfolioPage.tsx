@@ -56,8 +56,9 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
       await refreshHistory()
       onToast(`Deposited ${fmtUct(amount)}`, 'success')
     } catch (e) {
+      await refresh().catch(() => {})
+      await refreshHistory().catch(() => {})
       onToast(e instanceof Error ? e.message : 'Deposit failed', 'error')
-      throw e
     }
   }
 
