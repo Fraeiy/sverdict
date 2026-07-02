@@ -5,7 +5,8 @@
 export const TESTNET2_ORACLE_API_KEY = 'sk_ddc3cfcc001e4a28ac3fad7407f99590'
 
 export function sphereNetwork() {
-  return process.env.SPHERE_NETWORK || 'testnet'
+  const raw = (process.env.SPHERE_NETWORK || 'testnet').trim()
+  return raw || 'testnet'
 }
 
 export function sphereOracleApiKey() {

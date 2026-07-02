@@ -67,15 +67,28 @@ function txReference(result) {
 async function initSphere() {
   const mnemonic = requireEnv('TREASURY_MNEMONIC')
   const network = sphereNetwork()
+  if (!network) throw new Error('SPHERE_NETWORK resolved empty — set SPHERE_NETWORK=testnet or unset it')
   const { dataDir, tokensDir } = sphereDataDirs()
+  console.log(`[treasury-agent] initializing Sphere wallet (network=${network})`)
   const providers = createNodeProviders({
     network,
     dataDir,
     tokensDir,
     oracle: { apiKey: sphereOracleApiKey() },
   })
-  // network must be forwarded to Sphere.init (not included in createNodeProviders return value)
-  const { sphere } = await Sphere.init({ ...providers, network, mnemonic })
+  // createNodeProviders does NOT return `network` — pass it explicitly to Sphere.init
+  const { sphere } = await Sphere.init({
+    network,
+    mnemonic,
+    storage: providers.storage,
+    transport: providers.transport,
+    oracle: providers.oracle,
+    tokenStorage: providers.tokenStorage,
+    price: providers.price,
+    groupChat: providers.groupChat,
+    market: providers.market,
+    ipfsTokenStorage: providers.ipfsTokenStorage,
+  })
   const address = sphere.identity?.nametag || sphere.identity?.directAddress || 'unknown'
   console.log(`[treasury-agent] wallet ready: ${address}`)
   return sphere
