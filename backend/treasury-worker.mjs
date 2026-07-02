@@ -23,6 +23,9 @@ import { createClient } from '@supabase/supabase-js'
 import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { UCT_COIN_ID, normalizeRecipient, toRawString } from './lib/constants.mjs'
+import { loadProjectEnv } from './lib/loadEnv.mjs'
+
+loadProjectEnv()
 
 const LOOP = process.argv.includes('--loop')
 const DRY_RUN = process.argv.includes('--dry-run')
@@ -34,7 +37,16 @@ const STALE_MINUTES = Number(process.env.STALE_PROCESSING_MINUTES || 10)
 
 function requireEnv(name) {
   const v = process.env[name]
-  if (!v) throw new Error(`Missing required env: ${name}`)
+  if (!v) {
+    const hint = name === 'SUPABASE_SERVICE_ROLE_KEY'
+      ? 'Add to .env — Supabase Dashboard → Settings → API → service_role (secret)'
+      : name === 'SUPABASE_URL'
+        ? 'Add SUPABASE_URL or VITE_SUPABASE_URL to .env'
+        : name === 'TREASURY_MNEMONIC'
+          ? 'Add TREASURY_MNEMONIC to .env (only needed for live sends, not --status/--dry-run)'
+          : ''
+    throw new Error(`Missing required env: ${name}${hint ? ` — ${hint}` : ''}`)
+  }
   return v
 }
 
