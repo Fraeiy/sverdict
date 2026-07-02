@@ -95,7 +95,7 @@ npm run treasury:worker:dry-run      # preview sends (no mnemonic, no writes)
    Check Supabase `withdrawals` → `status=completed` + `tx_reference`, and wallet received UCT.
 5. **GitHub Actions** — add secrets under **Settings → Secrets and variables → Actions**, then **Actions → Treasury Agent → Run workflow**.
 
-**Treasury wallet must hold on-chain UCT.** User deposits send UCT to `@sphere-predict`, but the agent pays withdrawals from the treasury wallet's Sphere balance. If sends fail with `Insufficient balance`, fund `@sphere-predict` in Sphere (or wait — the agent requeues those withdrawals automatically).
+**Treasury wallet must hold on-chain UCT.** User deposits send UCT to `@sphere-predict`, but the agent pays withdrawals from the treasury wallet's Sphere balance. The worker logs `spendable UCT after sync` on each run — that must cover queued withdrawals. `TREASURY_MNEMONIC` must be the mnemonic for `@sphere-predict` (not a different wallet). GitHub Actions caches `.treasury-data` / `.treasury-tokens` so token inventory persists between runs.
 
 **Agentic for campaign submission:** autonomous agent fulfills withdrawal queue (payments on network).
 

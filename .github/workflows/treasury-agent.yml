@@ -20,6 +20,14 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Restore treasury wallet cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .treasury-data
+            .treasury-tokens
+          key: treasury-sphere-${{ runner.os }}-v1
+          restore-keys: treasury-sphere-${{ runner.os }}-
       - name: Show commit (verify latest code)
         run: git rev-parse HEAD && head -n 80 backend/treasury-worker.mjs | tail -n 20
       - name: Run treasury worker

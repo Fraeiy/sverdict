@@ -89,8 +89,56 @@ async function initSphere() {
     market: providers.market,
     ipfsTokenStorage: providers.ipfsTokenStorage,
   })
-  const address = sphere.identity?.nametag || sphere.identity?.directAddress || 'unknown'
-  console.log(`[treasury-agent] wallet ready: ${address}`)
+  const nametag = sphere.identity?.nametag || ''
+  const direct = sphere.identity?.directAddress || ''
+  console.log(`[treasury-agent] wallet ready: ${nametag || direct || 'unknown'}`)
+  return sphere
+}
+
+const UCT_DECIMALS = 18n
+
+function rawUctToHuman(raw) {
+  const v = BigInt(String(raw || 0))
+  const whole = v / 10n ** UCT_DECIMALS
+  const frac = v % 10n ** UCT_DECIMALS
+  if (frac === 0n) return Number(whole)
+  return Number(whole) + Number(frac) / Number(10n ** UCT_DECIMALS)
+}
+
+async function prepareTreasurySphere(sphere) {
+  const expectedNametag = (process.env.TREASURY_NAMETAG || 'sphere-predict').replace(/^@/, '').toLowerCase()
+  const actualNametag = (sphere.identity?.nametag || '').replace(/^@/, '').toLowerCase()
+  const direct = sphere.identity?.directAddress || '—'
+  console.log(`[treasury-agent] identity @${actualNametag || '—'} | ${direct}`)
+
+  if (actualNametag && actualNametag !== expectedNametag) {
+    console.warn(
+      `[treasury-agent] WARNING: mnemonic unlocks @${actualNametag}, expected @${expectedNametag} — user deposits may not land in this wallet`,
+    )
+  }
+
+  try {
+    console.log('[treasury-agent] syncing UCT inventory from network…')
+    await sphere.payments.sync()
+  } catch (e) {
+    console.warn('[treasury-agent] payments.sync failed:', e instanceof Error ? e.message : e)
+  }
+
+  try {
+    const assets = await sphere.payments.getAssets()
+    const uct = (assets || []).find(a =>
+      a.symbol === 'UCT' || a.coinId?.toLowerCase() === UCT_COIN_ID.toLowerCase(),
+    )
+    const raw = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
+    const human = rawUctToHuman(raw)
+    console.log(`[treasury-agent] spendable UCT after sync: ~${human.toFixed(4)} (raw=${raw})`)
+    if (human <= 0) {
+      console.warn('[treasury-agent] 0 spendable UCT in this wallet — check mnemonic matches @sphere-predict or fund the wallet')
+    }
+  } catch (e) {
+    console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
+  }
+
   return sphere
 }
 
@@ -296,7 +344,7 @@ async function runOnce() {
     return
   }
 
-  const sphere = await initSphere()
+  const sphere = await prepareTreasurySphere(await initSphere())
   const n = await processWithdrawals(db, sphere)
   console.log(`[treasury-agent] done — processed ${n} withdrawal(s)`)
 }
