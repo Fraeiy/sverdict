@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { TradeConfirmModal } from '../components/ui/TradeConfirmModal'
 import { useMarkets } from '../hooks/useMarkets'
 import { usePositions } from '../hooks/usePositions'
 import type { Market, Outcome } from '../lib/types'
@@ -19,6 +20,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
   const [market, setMarket] = useState<Market | null>(null)
   const [amount, setAmount] = useState('25')
   const [loading, setLoading] = useState<Outcome | null>(null)
+  const [confirmOutcome, setConfirmOutcome] = useState<Outcome | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -44,7 +46,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
   const stakeAmount = parseFloat(amount) || 0
   const insufficient = stakeAmount > availableBalance
 
-  async function handleBuy(outcome: Outcome) {
+  function requestBuy(outcome: Outcome) {
     if (!stakeAmount || stakeAmount <= 0) {
       onToast('Enter a valid stake amount', 'error')
       return
@@ -57,10 +59,16 @@ export function MarketDetailPage({ identity, onToast }: Props) {
       onToast('This market is not open for trading', 'error')
       return
     }
+    setConfirmOutcome(outcome)
+  }
 
+  async function confirmBuy() {
+    if (!confirmOutcome || !market) return
+    const outcome = confirmOutcome
     setLoading(outcome)
     try {
-      await placeTrade({ marketId: market!.id, outcome, amount: stakeAmount })
+      await placeTrade({ marketId: market.id, outcome, amount: stakeAmount })
+      setConfirmOutcome(null)
       onToast(`Bought ${outcome} for ${fmtUct(stakeAmount)}`, 'success')
       navigate('/portfolio?tab=positions')
     } catch (e) {
@@ -160,20 +168,30 @@ export function MarketDetailPage({ identity, onToast }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => handleBuy('YES')}
+              onClick={() => requestBuy('YES')}
               disabled={!!loading || insufficient || availableBalance <= 0}
               className="rounded-lg border border-[rgba(251,191,36,0.4)] bg-[rgba(251,191,36,0.12)] py-4 font-data text-sm font-bold uppercase tracking-wider text-[var(--color-gold-bright)] transition hover:bg-[rgba(251,191,36,0.2)] disabled:opacity-40"
             >
-              {loading === 'YES' ? 'Placing…' : 'Buy YES'}
+              Buy YES
             </button>
             <button
-              onClick={() => handleBuy('NO')}
+              onClick={() => requestBuy('NO')}
               disabled={!!loading || insufficient || availableBalance <= 0}
               className="rounded-lg border border-[rgba(232,93,111,0.35)] bg-[rgba(232,93,111,0.12)] py-4 font-data text-sm font-bold uppercase tracking-wider text-[var(--color-no)] transition hover:bg-[rgba(232,93,111,0.2)] disabled:opacity-40"
             >
-              {loading === 'NO' ? 'Placing…' : 'Buy NO'}
+              Buy NO
             </button>
           </div>
+
+          <TradeConfirmModal
+            open={confirmOutcome !== null}
+            question={market.question}
+            outcome={confirmOutcome ?? 'YES'}
+            amount={stakeAmount}
+            loading={loading !== null}
+            onConfirm={() => confirmBuy()}
+            onCancel={() => { if (!loading) setConfirmOutcome(null) }}
+          />
 
           <p className="mt-4 text-center font-data text-[9px] text-[var(--color-muted)]">
             Instant execution from portfolio margin — no per-trade wallet popup
