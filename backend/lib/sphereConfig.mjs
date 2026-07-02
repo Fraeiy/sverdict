@@ -24,3 +24,15 @@ export function sphereDataDirs() {
 export function sphereTokenSync() {
   return { ipfs: { enabled: true } }
 }
+
+/** On testnet2, mint UCT when spendable balance is 0 (set TREASURY_AUTO_MINT=false to disable). */
+export function treasuryAutoMintEnabled() {
+  if (process.env.TREASURY_AUTO_MINT === 'false') return false
+  const net = sphereNetwork()
+  return net === 'testnet' || net === 'testnet2'
+}
+
+export function treasuryMintTopupUct() {
+  const n = Number(process.env.TREASURY_MINT_TOPUP_UCT || 100)
+  return BigInt(Math.max(1, Math.floor(n)))
+}

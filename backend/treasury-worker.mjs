@@ -24,7 +24,14 @@ import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { UCT_COIN_ID, normalizeRecipient, toRawString } from './lib/constants.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
-import { sphereDataDirs, sphereNetwork, sphereOracleApiKey, sphereTokenSync } from './lib/sphereConfig.mjs'
+import {
+  sphereDataDirs,
+  sphereNetwork,
+  sphereOracleApiKey,
+  sphereTokenSync,
+  treasuryAutoMintEnabled,
+  treasuryMintTopupUct,
+} from './lib/sphereConfig.mjs'
 
 loadProjectEnv()
 
@@ -124,24 +131,52 @@ async function prepareTreasurySphere(sphere) {
   }
 
   try {
-    console.log('[treasury-agent] syncing UCT inventory from IPFS/network…')
+    console.log('[treasury-agent] connecting Nostr transport…')
+    await sphere.reconnect()
+    console.log('[treasury-agent] transport connected')
+  } catch (e) {
+    console.warn('[treasury-agent] transport connect failed:', e instanceof Error ? e.message : e)
+  }
+
+  try {
+    console.log('[treasury-agent] receiving pending token transfers (Nostr)…')
+    const received = await sphere.payments.receive()
+    const n = received?.transfers?.length ?? 0
+    console.log(`[treasury-agent] receive done — new transfers=${n}`)
+  } catch (e) {
+    console.warn('[treasury-agent] payments.receive failed:', e instanceof Error ? e.message : e)
+  }
+
+  try {
+    console.log('[treasury-agent] syncing token inventory (IPFS)…')
     const syncResult = await sphere.payments.sync()
     console.log(`[treasury-agent] sync done — added=${syncResult?.added ?? 0} removed=${syncResult?.removed ?? 0}`)
   } catch (e) {
     console.warn('[treasury-agent] payments.sync failed:', e instanceof Error ? e.message : e)
   }
 
-  const human = await logSpendableUct(sphere)
-  if (human <= 0) {
+  let human = await logSpendableUct(sphere, 'after ingest')
+
+  if (human <= 0 && treasuryAutoMintEnabled()) {
+    const topup = treasuryMintTopupUct()
+    console.log(`[treasury-agent] testnet auto-mint ${topup} UCT (deposits sit in browser/IPFS; agent mints spendable tokens on testnet2)`)
+    const minted = await sphere.payments.mintFungibleToken(UCT_COIN_ID, topup)
+    if (minted?.success) {
+      console.log(`[treasury-agent] mint ok — token ${minted.tokenId || minted.token?.id || 'created'}`)
+      human = await logSpendableUct(sphere, 'after mint')
+    } else {
+      console.warn('[treasury-agent] auto-mint failed:', minted?.error || 'unknown error')
+    }
+  } else if (human <= 0) {
     console.warn(
-      '[treasury-agent] 0 spendable UCT after sync — deposits may still be in browser-only storage; open @sphere-predict in Sphere once to publish tokens to IPFS, or mint/send UCT directly to this wallet',
+      '[treasury-agent] 0 spendable UCT — enable testnet auto-mint (default on) or open @sphere-predict in Sphere browser to sync tokens',
     )
   }
 
   return sphere
 }
 
-async function logSpendableUct(sphere) {
+async function logSpendableUct(sphere, phase = '') {
   try {
     const assets = await sphere.payments.getAssets()
     const uct = (assets || []).find(a =>
@@ -149,7 +184,8 @@ async function logSpendableUct(sphere) {
     )
     const raw = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
     const human = rawUctToHuman(raw)
-    console.log(`[treasury-agent] spendable UCT after sync: ~${human.toFixed(4)} (raw=${raw})`)
+    const label = phase ? ` ${phase}` : ''
+    console.log(`[treasury-agent] spendable UCT${label}: ~${human.toFixed(4)} (raw=${raw})`)
     return human
   } catch (e) {
     console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
