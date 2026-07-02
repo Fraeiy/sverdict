@@ -26,7 +26,7 @@ export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Prop
       <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface)]/92 backdrop-blur-xl">
         <div className="mx-auto flex h-[58px] max-w-6xl items-center gap-6 px-4">
           <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[rgba(212,168,67,0.35)] bg-[rgba(212,168,67,0.1)] font-data text-xs font-bold text-[var(--color-gold)]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.12)] font-data text-xs font-bold text-[var(--color-gold)]">
               SP
             </span>
             <span className="font-data text-sm font-bold tracking-[0.12em] text-[var(--color-gold)]">

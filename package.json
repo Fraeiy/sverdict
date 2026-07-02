@@ -20,6 +20,8 @@
     "start": "node backend/server.mjs",
     "treasury:worker": "node backend/treasury-worker.mjs",
     "treasury:worker:loop": "node backend/treasury-worker.mjs --loop",
+    "treasury:worker:dry-run": "node backend/treasury-worker.mjs --dry-run",
+    "treasury:worker:status": "node backend/treasury-worker.mjs --status",
     "lint": "eslint .",
     "preview:legacy": "vite preview"
   },

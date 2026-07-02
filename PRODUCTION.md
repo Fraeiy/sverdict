@@ -69,9 +69,31 @@ Withdrawals are queued in Supabase; the **treasury agent** sends UCT on testnet2
 Local / long-running:
 ```bash
 # .env with TREASURY_MNEMONIC + SUPABASE_* then:
-npm run treasury:worker        # one pass
-npm run treasury:worker:loop   # poll every 60s
+npm run treasury:worker              # one pass (live sends)
+npm run treasury:worker:loop         # poll every 60s
+npm run treasury:worker:status       # queue counts (no mnemonic needed)
+npm run treasury:worker:dry-run      # preview sends (no mnemonic, no writes)
 ```
+
+### Test the agent (before going live)
+
+1. **Migration 006** — run `006_withdrawal_processing.sql` in Supabase SQL Editor
+2. **Queue status** (needs only `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `.env`):
+   ```bash
+   npm run treasury:worker:status
+   ```
+   Expect `submitted: 0` until someone withdraws.
+3. **Dry-run** — submit a small withdrawal in the app, then:
+   ```bash
+   npm run treasury:worker:dry-run
+   ```
+   Should list the pending row with recipient + amount; **no** on-chain send.
+4. **Live pass** — add `TREASURY_MNEMONIC` (+ optional `SPHERE_ORACLE_API_KEY`), then:
+   ```bash
+   npm run treasury:worker
+   ```
+   Check Supabase `withdrawals` → `status=completed` + `tx_reference`, and wallet received UCT.
+5. **GitHub Actions** — add secrets under **Settings → Secrets and variables → Actions**, then **Actions → Treasury Agent → Run workflow**.
 
 **Agentic for campaign submission:** autonomous agent fulfills withdrawal queue (payments on network).
 

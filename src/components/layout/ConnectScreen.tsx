@@ -28,7 +28,7 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
       <div className="card card-glow w-full max-w-md p-8">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl border border-[rgba(212,168,67,0.4)] bg-[rgba(212,168,67,0.08)]">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl border border-[rgba(245,158,11,0.4)] bg-[rgba(245,158,11,0.1)]">
             <span className="font-data text-xl font-bold text-[var(--color-gold)]">SP</span>
           </div>
           <p className="label-caps mb-2">Unicity · Sphere</p>

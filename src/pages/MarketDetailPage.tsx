@@ -98,11 +98,11 @@ export function MarketDetailPage({ identity, onToast }: Props) {
       )}
 
       <div className="mt-8 grid grid-cols-2 gap-4">
-        <div className="stat-block border-[rgba(80,200,120,0.2)] text-center">
-          <p className="label-caps text-[var(--color-yes)]">YES probability</p>
-          <p className="mt-2 font-data text-4xl font-bold text-[var(--color-yes)]">{yes}%</p>
+        <div className="stat-block border-[rgba(251,191,36,0.25)] text-center">
+          <p className="label-caps text-[var(--color-gold-bright)]">YES probability</p>
+          <p className="mt-2 font-data text-4xl font-bold text-[var(--color-gold-bright)]">{yes}%</p>
         </div>
-        <div className="stat-block border-[rgba(232,93,111,0.2)] text-center">
+        <div className="stat-block border-[rgba(248,113,113,0.25)] text-center">
           <p className="label-caps text-[var(--color-no)]">NO probability</p>
           <p className="mt-2 font-data text-4xl font-bold text-[var(--color-no)]">{no}%</p>
         </div>
@@ -127,7 +127,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
           </div>
 
           {availableBalance <= 0 && (
-            <div className="mb-4 rounded-lg border border-[rgba(212,168,67,0.3)] bg-[rgba(212,168,67,0.08)] px-4 py-3 text-sm text-[var(--color-gold-bright)]">
+            <div className="mb-4 rounded-lg border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.1)] px-4 py-3 text-sm text-[var(--color-gold-bright)]">
               Deposit funds before trading.{' '}
               <Link to="/portfolio" className="font-bold underline">Portfolio →</Link>
             </div>
@@ -162,7 +162,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
             <button
               onClick={() => handleBuy('YES')}
               disabled={!!loading || insufficient || availableBalance <= 0}
-              className="rounded-lg border border-[rgba(80,200,120,0.35)] bg-[rgba(80,200,120,0.12)] py-4 font-data text-sm font-bold uppercase tracking-wider text-[var(--color-yes)] transition hover:bg-[rgba(80,200,120,0.2)] disabled:opacity-40"
+              className="rounded-lg border border-[rgba(251,191,36,0.4)] bg-[rgba(251,191,36,0.12)] py-4 font-data text-sm font-bold uppercase tracking-wider text-[var(--color-gold-bright)] transition hover:bg-[rgba(251,191,36,0.2)] disabled:opacity-40"
             >
               {loading === 'YES' ? 'Placing…' : 'Buy YES'}
             </button>

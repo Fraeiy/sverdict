@@ -5,22 +5,27 @@
   --font-mono: "Space Mono", ui-monospace, monospace;
   --font-sans: "Syne", ui-sans-serif, system-ui, sans-serif;
 
-  /* Unicity / Sphere brand */
-  --color-surface: #0a0a08;
-  --color-surface-2: #111110;
-  --color-surface-3: #1a1916;
-  --color-surface-4: #242220;
-  --color-border: #2a2820;
-  --color-border-2: #3d3828;
-  --color-gold: #d4a843;
-  --color-gold-bright: #e8c46a;
-  --color-gold-dim: #8b7129;
-  --color-accent: #d4a843;
-  --color-yes: #50c878;
-  --color-no: #e85d6f;
-  --color-muted: #6b6560;
-  --color-text: #f5f0e8;
-  --color-text-2: #a8a090;
+  /* Brand palette */
+  --color-primary: #f59e0b;
+  --color-primary-bright: #fbbf24;
+  --color-primary-dim: #b45309;
+  --color-surface: #111111;
+  --color-surface-2: #1a1a1a;
+  --color-surface-3: #1a1a1a;
+  --color-surface-4: #252525;
+  --color-border: #2e2e2e;
+  --color-border-2: #3f3f3f;
+  --color-text: #ffffff;
+  --color-text-2: #d1d5db;
+  --color-muted: #9ca3af;
+
+  /* Aliases used across components */
+  --color-gold: #f59e0b;
+  --color-gold-bright: #fbbf24;
+  --color-gold-dim: #b45309;
+  --color-accent: #f59e0b;
+  --color-yes: #fbbf24;
+  --color-no: #f87171;
 }
 
 html, body, #root {
@@ -33,10 +38,10 @@ body {
   color: var(--color-text);
   background-color: var(--color-surface);
   background-image:
-    linear-gradient(rgba(212, 168, 67, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(212, 168, 67, 0.03) 1px, transparent 1px),
-    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(212, 168, 67, 0.12), transparent 55%),
-    radial-gradient(ellipse 50% 40% at 100% 80%, rgba(80, 200, 120, 0.06), transparent 50%);
+    linear-gradient(rgba(245, 158, 11, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 158, 11, 0.04) 1px, transparent 1px),
+    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(245, 158, 11, 0.14), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 80%, rgba(251, 191, 36, 0.06), transparent 50%);
   background-size: 48px 48px, 48px 48px, 100% 100%, 100% 100%;
 }
 
@@ -45,7 +50,6 @@ body {
   scrollbar-color: var(--color-border-2) transparent;
 }
 
-/* ─── Typography ─── */
 .font-display { font-family: var(--font-display); }
 .font-data { font-family: var(--font-mono); }
 .label-caps {
@@ -57,20 +61,19 @@ body {
   color: var(--color-muted);
 }
 
-/* ─── Cards ─── */
 .card {
-  background: linear-gradient(145deg, rgba(26, 25, 22, 0.95), rgba(17, 17, 16, 0.98));
+  background: linear-gradient(145deg, rgba(26, 26, 26, 0.98), rgba(17, 17, 17, 0.99));
   border: 1px solid var(--color-border);
   border-radius: 1rem;
-  box-shadow: 0 0 0 1px rgba(212, 168, 67, 0.04), 0 8px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.05), 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 .card-hover {
   transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 .card-hover:hover {
-  border-color: rgba(212, 168, 67, 0.35);
+  border-color: rgba(245, 158, 11, 0.4);
   transform: translateY(-2px);
-  box-shadow: 0 0 0 1px rgba(212, 168, 67, 0.08), 0 12px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 .card-glow {
   position: relative;
@@ -80,14 +83,13 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(212, 168, 67, 0.08), transparent 45%);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), transparent 45%);
   pointer-events: none;
 }
 
-/* ─── Buttons ─── */
 .btn-gold {
-  background: linear-gradient(180deg, var(--color-gold-bright), var(--color-gold));
-  color: #0a0a08;
+  background: linear-gradient(180deg, var(--color-primary-bright), var(--color-primary));
+  color: #111111;
   font-weight: 700;
   border: none;
   transition: filter 0.15s, transform 0.15s;
@@ -107,12 +109,11 @@ body {
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 .btn-ghost:hover:not(:disabled) {
-  border-color: rgba(212, 168, 67, 0.45);
-  color: var(--color-gold);
-  background: rgba(212, 168, 67, 0.06);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: var(--color-primary-bright);
+  background: rgba(245, 158, 11, 0.08);
 }
 
-/* ─── Chips & badges ─── */
 .chip {
   font-family: var(--font-mono);
   font-size: 0.65rem;
@@ -124,32 +125,31 @@ body {
   border: 1px solid transparent;
 }
 .chip-gold {
-  background: rgba(212, 168, 67, 0.12);
-  color: var(--color-gold);
-  border-color: rgba(212, 168, 67, 0.25);
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-primary-bright);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 .chip-yes {
-  background: rgba(80, 200, 120, 0.12);
-  color: var(--color-yes);
-  border-color: rgba(80, 200, 120, 0.25);
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--color-primary-bright);
+  border-color: rgba(251, 191, 36, 0.3);
 }
 .chip-no {
-  background: rgba(232, 93, 111, 0.12);
+  background: rgba(248, 113, 113, 0.12);
   color: var(--color-no);
-  border-color: rgba(232, 93, 111, 0.25);
+  border-color: rgba(248, 113, 113, 0.28);
 }
 .chip-open {
-  background: rgba(80, 200, 120, 0.1);
-  color: var(--color-yes);
-  border-color: rgba(80, 200, 120, 0.2);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-primary);
+  border-color: rgba(245, 158, 11, 0.25);
 }
 .chip-neutral {
-  background: rgba(168, 160, 144, 0.08);
+  background: rgba(209, 213, 219, 0.06);
   color: var(--color-text-2);
   border-color: var(--color-border);
 }
 
-/* ─── Inputs ─── */
 .input-pro {
   background: var(--color-surface-4);
   border: 1px solid var(--color-border);
@@ -159,11 +159,10 @@ body {
 }
 .input-pro:focus {
   outline: none;
-  border-color: rgba(212, 168, 67, 0.5);
-  box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.1);
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
 }
 
-/* ─── Odds bar ─── */
 .odds-track {
   height: 6px;
   border-radius: 3px;
@@ -173,13 +172,12 @@ body {
 .odds-fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--color-yes), var(--color-gold));
+  background: linear-gradient(90deg, var(--color-primary-bright), var(--color-primary));
   transition: width 0.5s ease;
 }
 
-/* ─── Stat blocks ─── */
 .stat-block {
-  background: var(--color-surface-3);
+  background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 1rem 1.25rem;
@@ -190,11 +188,10 @@ body {
   font-weight: 700;
   color: var(--color-text);
 }
-.stat-value-gold { color: var(--color-gold); }
-.stat-value-yes { color: var(--color-yes); }
+.stat-value-gold { color: var(--color-primary-bright); }
+.stat-value-yes { color: var(--color-primary-bright); }
 .stat-value-no { color: var(--color-no); }
 
-/* ─── Tab nav ─── */
 .tab-nav {
   border-bottom: 1px solid var(--color-border);
 }
@@ -212,21 +209,20 @@ body {
 }
 .tab-item:hover { color: var(--color-text-2); }
 .tab-item-active {
-  color: var(--color-gold);
-  border-bottom-color: var(--color-gold);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
-/* ─── Pulse dot (live) ─── */
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--color-yes);
+  background: var(--color-primary);
   animation: live-pulse 2s ease-in-out infinite;
 }
 @keyframes live-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(80, 200, 120, 0.5); }
-  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(80, 200, 120, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
 }
 
 .line-clamp-2 {

@@ -13,8 +13,10 @@
  *   STALE_PROCESSING_MINUTES (default 10)
  *
  * Usage:
- *   node backend/treasury-worker.mjs          # one pass
- *   node backend/treasury-worker.mjs --loop   # poll every 60s
+ *   node backend/treasury-worker.mjs              # one pass
+ *   node backend/treasury-worker.mjs --loop       # poll every 60s
+ *   node backend/treasury-worker.mjs --dry-run    # preview queue, no sends
+ *   node backend/treasury-worker.mjs --status     # queue counts only
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -23,6 +25,8 @@ import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { UCT_COIN_ID, normalizeRecipient, toRawString } from './lib/constants.mjs'
 
 const LOOP = process.argv.includes('--loop')
+const DRY_RUN = process.argv.includes('--dry-run')
+const STATUS_ONLY = process.argv.includes('--status')
 const POLL_MS = Number(process.env.TREASURY_POLL_MS || 60_000)
 const MAX_AMOUNT = Number(process.env.MAX_AUTO_WITHDRAWAL_UCT || 500)
 const MAX_PER_RUN = Number(process.env.MAX_PER_RUN || 5)
@@ -95,8 +99,22 @@ async function resetStaleProcessing(db) {
   }
 }
 
-async function processWithdrawals(db, sphere) {
-  await resetStaleProcessing(db)
+async function showStatus(db) {
+  const statuses = ['submitted', 'processing', 'completed', 'failed']
+  const counts = {}
+  for (const status of statuses) {
+    const { count } = await db.from('withdrawals').select('*', { count: 'exact', head: true }).eq('status', status)
+    counts[status] = count ?? 0
+  }
+  console.log('[treasury-agent] withdrawal queue status:')
+  for (const status of statuses) {
+    console.log(`  ${status}: ${counts[status]}`)
+  }
+  return counts
+}
+
+async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
+  if (!dryRun) await resetStaleProcessing(db)
 
   const { data: pending, error } = await db.from('withdrawals')
     .select('*, users(nametag, wallet_address)')
@@ -106,8 +124,12 @@ async function processWithdrawals(db, sphere) {
 
   if (error) throw error
   if (!pending?.length) {
-    console.log('[treasury-agent] no pending withdrawals')
+    console.log(`[treasury-agent] no pending withdrawals${dryRun ? ' (dry-run)' : ''}`)
     return 0
+  }
+
+  if (dryRun) {
+    console.log(`[treasury-agent] dry-run — ${pending.length} pending withdrawal(s):`)
   }
 
   let processed = 0
@@ -130,6 +152,15 @@ async function processWithdrawals(db, sphere) {
       continue
     }
 
+    const recipient = normalizeRecipient(recipientRaw)
+    const memo = `SPHERE_PREDICT_WITHDRAW:${w.id}`
+
+    if (dryRun) {
+      console.log(`  → would send ${amount} UCT to ${recipient} (${w.id}) memo=${memo}`)
+      processed += 1
+      continue
+    }
+
     const { data: locked, error: lockErr } = await db.from('withdrawals')
       .update({ status: 'processing', processing_at: new Date().toISOString() })
       .eq('id', w.id)
@@ -138,9 +169,6 @@ async function processWithdrawals(db, sphere) {
       .single()
 
     if (lockErr || !locked) continue
-
-    const recipient = normalizeRecipient(recipientRaw)
-    const memo = `SPHERE_PREDICT_WITHDRAW:${w.id}`
 
     try {
       console.log(`[treasury-agent] sending ${amount} UCT → ${recipient} (${w.id})`)
@@ -198,6 +226,19 @@ async function failWithdrawal(db, w, reason, { recredit = false } = {}) {
 
 async function runOnce() {
   const db = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'))
+
+  if (STATUS_ONLY) {
+    await showStatus(db)
+    return
+  }
+
+  if (DRY_RUN) {
+    console.log('[treasury-agent] DRY-RUN — no wallet init, no DB writes, no on-chain sends')
+    const n = await processWithdrawals(db, null, { dryRun: true })
+    console.log(`[treasury-agent] dry-run done — would process ${n} withdrawal(s)`)
+    return
+  }
+
   const sphere = await initSphere()
   const n = await processWithdrawals(db, sphere)
   console.log(`[treasury-agent] done — processed ${n} withdrawal(s)`)
@@ -207,6 +248,9 @@ async function main() {
   if (!LOOP) {
     await runOnce()
     return
+  }
+  if (DRY_RUN || STATUS_ONLY) {
+    throw new Error('--dry-run and --status cannot be used with --loop')
   }
   console.log(`[treasury-agent] loop mode — poll every ${POLL_MS}ms`)
   for (;;) {

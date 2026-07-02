@@ -107,7 +107,7 @@ export function AdminPage({ identity, onToast }: Props) {
       <h1 className="text-3xl font-bold">Admin</h1>
       <p className="mt-2 text-[var(--color-text-2)]">Create markets, resolve outcomes, and fulfill withdrawals</p>
 
-      <div className="card mt-8 border-[rgba(212,168,67,0.25)] p-6">
+      <div className="card mt-8 border-[rgba(245,158,11,0.28)] p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Pending withdrawals</h2>

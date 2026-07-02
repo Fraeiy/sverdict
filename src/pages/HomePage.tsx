@@ -54,7 +54,7 @@ export function HomePage() {
               key={s}
               onClick={() => { setStatus(s); applyFilters({ status: s }) }}
               className={`chip capitalize transition ${
-                status === s ? 'chip-gold' : 'chip-neutral hover:border-[rgba(212,168,67,0.3)]'
+                status === s ? 'chip-gold' : 'chip-neutral hover:border-[rgba(245,158,11,0.35)]'
               }`}
             >
               {s}
@@ -70,8 +70,8 @@ export function HomePage() {
             onClick={() => { setCategory(c); applyFilters({ category: c }) }}
             className={`rounded-full px-4 py-1.5 font-data text-[10px] font-bold uppercase tracking-wider transition ${
               category === c
-                ? 'bg-[var(--color-gold)] text-[#0a0a08]'
-                : 'border border-[var(--color-border)] text-[var(--color-text-2)] hover:border-[rgba(212,168,67,0.35)] hover:text-[var(--color-gold)]'
+                ? 'bg-[var(--color-gold)] text-[#111111]'
+                : 'border border-[var(--color-border)] text-[var(--color-text-2)] hover:border-[rgba(245,158,11,0.4)] hover:text-[var(--color-gold-bright)]'
             }`}
           >
             {c}

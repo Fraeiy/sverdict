@@ -132,7 +132,7 @@ header {
 
 /* ─── MNEMONIC BANNER ────────────────────────────────────────────────────── */
 .mnemonic-banner {
-  background: rgba(212,168,67,.08); border-bottom: 1px solid var(--golddim);
+  background: rgba(245,158,11,.08); border-bottom: 1px solid var(--golddim);
   padding: 10px 2rem; font-family: var(--mono); font-size: 11px; color: var(--gold);
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
@@ -243,7 +243,7 @@ main { flex: 1; padding: 2rem 2.5rem; max-width: 1100px; margin: 0 auto; width: 
   cursor: pointer; transition: all .15s; letter-spacing: .06em;
 }
 .filter-btn:hover, .filter-btn.active {
-  border-color: var(--golddim); color: var(--gold); background: rgba(212,168,67,.06);
+  border-color: var(--golddim); color: var(--gold); background: rgba(245,158,11,.06);
 }
 
 /* ─── MARKET CARDS ───────────────────────────────────────────────────────── */
@@ -581,7 +581,7 @@ main { flex: 1; padding: 2rem 2.5rem; max-width: 1100px; margin: 0 auto; width: 
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.toast-success { border-color: rgba(80,200,120,.4); color: var(--green); }
 .toast.toast-error   { border-color: rgba(224,80,80,.4);  color: var(--red);   }
-.toast.toast-info    { border-color: rgba(212,168,67,.4); color: var(--gold);  }
+.toast.toast-info    { border-color: rgba(245,158,11,.4); color: var(--gold);  }
 
 /* ─── HELPERS ────────────────────────────────────────────────────────────── */
 .gold { color: var(--gold); }

@@ -112,7 +112,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
           >
             {t.label}
             {t.badge ? (
-              <span className="rounded bg-[rgba(212,168,67,0.2)] px-1.5 py-0.5 font-data text-[9px] text-[var(--color-gold)]">
+              <span className="rounded bg-[rgba(245,158,11,0.2)] px-1.5 py-0.5 font-data text-[9px] text-[var(--color-gold-bright)]">
                 {t.badge}
               </span>
             ) : null}
