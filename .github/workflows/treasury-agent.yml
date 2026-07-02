@@ -1,6 +1,6 @@
 # Autonomous treasury agent — processes withdrawal queue on testnet2.
 # Add repo secrets: TREASURY_MNEMONIC, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-# Optional: SPHERE_ORACLE_API_KEY (testnet2 gateway key)
+# Optional: SPHERE_ORACLE_API_KEY (defaults to public testnet2 key if unset)
 
 name: Treasury Agent
 

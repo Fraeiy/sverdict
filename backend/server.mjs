@@ -7,6 +7,7 @@ import { applyMarketPacket, cloneSeedMarkets, normalizeMarket } from '../src/lib
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
 import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
+import { sphereDataDirs, sphereNetwork, sphereOracleApiKey } from './lib/sphereConfig.mjs'
 import { initPlatform } from './platform/engine.mjs'
 import { handlePlatformApi } from './platform/routes.mjs'
 import { setTreasury } from './platform/store.mjs'
@@ -122,11 +123,18 @@ function debitBalance(address, amount) {
 
 async function initTreasury() {
   try {
-    const providers = createNodeProviders({ network: 'testnet' })
+    const network = sphereNetwork()
+    const { dataDir, tokensDir } = sphereDataDirs()
+    const providers = createNodeProviders({
+      network,
+      dataDir,
+      tokensDir,
+      oracle: { apiKey: sphereOracleApiKey() },
+    })
     const mnemonic = process.env.TREASURY_MNEMONIC
     const initOptions = mnemonic
-      ? { ...providers, mnemonic }
-      : { ...providers, autoGenerate: true }
+      ? { ...providers, network, mnemonic }
+      : { ...providers, network, autoGenerate: true }
     if (!mnemonic) {
       console.warn('⚠️  No TREASURY_MNEMONIC env var set. Using auto-generated treasury wallet for this run. Set TREASURY_MNEMONIC for persistent treasury.')
     }

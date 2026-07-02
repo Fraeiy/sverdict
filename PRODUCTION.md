@@ -63,7 +63,7 @@ Withdrawals are queued in Supabase; the **treasury agent** sends UCT on testnet2
 2. Set GitHub repo secrets (for `.github/workflows/treasury-agent.yml`):
    - `TREASURY_MNEMONIC` — **secret**, wallet for `@sphere-predict`
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-   - `SPHERE_ORACLE_API_KEY` — testnet2 gateway key (see `@unicitylabs/sphere-sdk` README)
+   - `SPHERE_ORACLE_API_KEY` — optional; defaults to public testnet2 key if unset
 3. Enable GitHub Actions on the repo — runs every 5 minutes
 
 Local / long-running:

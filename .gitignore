@@ -35,5 +35,7 @@ supabase/.temp/
 
 # Local wallet data
 sphere-data/
+.treasury-data/
+.treasury-tokens/
 .env
 .env.production.local

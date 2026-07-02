@@ -24,6 +24,7 @@ import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { UCT_COIN_ID, normalizeRecipient, toRawString } from './lib/constants.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
+import { sphereDataDirs, sphereNetwork, sphereOracleApiKey } from './lib/sphereConfig.mjs'
 
 loadProjectEnv()
 
@@ -65,12 +66,16 @@ function txReference(result) {
 
 async function initSphere() {
   const mnemonic = requireEnv('TREASURY_MNEMONIC')
-  const apiKey = process.env.SPHERE_ORACLE_API_KEY
+  const network = sphereNetwork()
+  const { dataDir, tokensDir } = sphereDataDirs()
   const providers = createNodeProviders({
-    network: 'testnet',
-    ...(apiKey ? { oracle: { apiKey } } : {}),
+    network,
+    dataDir,
+    tokensDir,
+    oracle: { apiKey: sphereOracleApiKey() },
   })
-  const { sphere } = await Sphere.init({ ...providers, mnemonic })
+  // network must be forwarded to Sphere.init (not included in createNodeProviders return value)
+  const { sphere } = await Sphere.init({ ...providers, network, mnemonic })
   const address = sphere.identity?.nametag || sphere.identity?.directAddress || 'unknown'
   console.log(`[treasury-agent] wallet ready: ${address}`)
   return sphere
