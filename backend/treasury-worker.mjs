@@ -108,13 +108,18 @@ async function setBalance(db, userId, amount) {
 }
 
 async function notify(db, userId, title, body, metadata = {}) {
-  await db.from('notifications').insert({
+  const { error } = await db.from('notifications').insert({
     user_id: userId,
     type: 'withdrawal',
     title,
     body,
     metadata,
-  }).catch(() => {})
+  })
+  if (error) console.warn('[treasury-agent] notify failed:', error.message)
+}
+
+function isTreasuryFundsError(reason) {
+  return /insufficient balance/i.test(reason)
 }
 
 async function resetStaleProcessing(db) {
@@ -228,28 +233,50 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e)
       console.error(`[treasury-agent] failed ${w.id}:`, reason)
-      await failWithdrawal(db, w, reason, { recredit: true })
+      const treasuryEmpty = isTreasuryFundsError(reason)
+      await failWithdrawal(db, w, reason, {
+        recredit: !treasuryEmpty,
+        requeue: treasuryEmpty,
+      })
     }
   }
 
   return processed
 }
 
-async function failWithdrawal(db, w, reason, { recredit = false } = {}) {
+async function failWithdrawal(db, w, reason, { recredit = false, requeue = false } = {}) {
   if (recredit) {
     const bal = await getBalance(db, w.user_id)
     await setBalance(db, w.user_id, bal + Number(w.amount))
   }
-  await db.from('withdrawals').update({
+
+  if (requeue) {
+    const { error } = await db.from('withdrawals').update({
+      status: 'submitted',
+      failure_reason: reason.slice(0, 500),
+      processing_at: null,
+    }).eq('id', w.id)
+    if (error) console.error(`[treasury-agent] requeue ${w.id} failed:`, error.message)
+    console.warn(
+      `[treasury-agent] requeued ${w.id} — @sphere-predict treasury needs more on-chain UCT (deposits fund the ledger; treasury wallet must hold UCT to pay out)`,
+    )
+    return
+  }
+
+  const { error: updErr } = await db.from('withdrawals').update({
     status: 'failed',
     failure_reason: reason.slice(0, 500),
     processing_at: null,
   }).eq('id', w.id)
+  if (updErr) console.error(`[treasury-agent] mark failed ${w.id}:`, updErr.message)
+
   await notify(
     db,
     w.user_id,
     'Withdrawal failed',
-    `Could not send ${Number(w.amount).toFixed(2)} UCT — balance restored. ${reason}`,
+    recredit
+      ? `Could not send ${Number(w.amount).toFixed(2)} UCT — balance restored. ${reason}`
+      : `Could not send ${Number(w.amount).toFixed(2)} UCT. ${reason}`,
     { withdrawalId: w.id, agent: 'treasury-worker' },
   )
 }
