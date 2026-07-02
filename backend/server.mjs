@@ -7,7 +7,7 @@ import { applyMarketPacket, cloneSeedMarkets, normalizeMarket } from '../src/lib
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
 import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
-import { sphereDataDirs, sphereNetwork, sphereOracleApiKey } from './lib/sphereConfig.mjs'
+import { sphereDataDirs, sphereNetwork, sphereOracleApiKey, sphereTokenSync } from './lib/sphereConfig.mjs'
 import { initPlatform } from './platform/engine.mjs'
 import { handlePlatformApi } from './platform/routes.mjs'
 import { setTreasury } from './platform/store.mjs'
@@ -130,15 +130,27 @@ async function initTreasury() {
       dataDir,
       tokensDir,
       oracle: { apiKey: sphereOracleApiKey() },
+      tokenSync: sphereTokenSync(),
     })
     const mnemonic = process.env.TREASURY_MNEMONIC
-    const initOptions = mnemonic
-      ? { ...providers, network, mnemonic }
-      : { ...providers, network, autoGenerate: true }
+    const initOptions = {
+      network,
+      storage: providers.storage,
+      transport: providers.transport,
+      oracle: providers.oracle,
+      tokenStorage: providers.tokenStorage,
+      price: providers.price,
+      groupChat: providers.groupChat,
+      market: providers.market,
+      ...(mnemonic ? { mnemonic } : { autoGenerate: true }),
+    }
     if (!mnemonic) {
       console.warn('⚠️  No TREASURY_MNEMONIC env var set. Using auto-generated treasury wallet for this run. Set TREASURY_MNEMONIC for persistent treasury.')
     }
     const { sphere } = await Sphere.init(initOptions)
+    if (providers.ipfsTokenStorage) {
+      await sphere.addTokenStorageProvider(providers.ipfsTokenStorage)
+    }
     treasurySphere = sphere
     TREASURY_ADDRESS = sphere.identity?.directAddress || 'unknown'
     console.log('Treasury wallet ready. Address for deposits:', TREASURY_ADDRESS)

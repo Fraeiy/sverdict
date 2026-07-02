@@ -19,3 +19,8 @@ export function sphereDataDirs() {
     tokensDir: process.env.TREASURY_TOKENS_DIR || './.treasury-tokens',
   }
 }
+
+/** Required so Node worker can pull UCT received by the browser @sphere-predict wallet. */
+export function sphereTokenSync() {
+  return { ipfs: { enabled: true } }
+}

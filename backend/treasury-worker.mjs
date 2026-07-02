@@ -24,7 +24,7 @@ import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { UCT_COIN_ID, normalizeRecipient, toRawString } from './lib/constants.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
-import { sphereDataDirs, sphereNetwork, sphereOracleApiKey } from './lib/sphereConfig.mjs'
+import { sphereDataDirs, sphereNetwork, sphereOracleApiKey, sphereTokenSync } from './lib/sphereConfig.mjs'
 
 loadProjectEnv()
 
@@ -75,6 +75,7 @@ async function initSphere() {
     dataDir,
     tokensDir,
     oracle: { apiKey: sphereOracleApiKey() },
+    tokenSync: sphereTokenSync(),
   })
   // createNodeProviders does NOT return `network` — pass it explicitly to Sphere.init
   const { sphere } = await Sphere.init({
@@ -87,8 +88,13 @@ async function initSphere() {
     price: providers.price,
     groupChat: providers.groupChat,
     market: providers.market,
-    ipfsTokenStorage: providers.ipfsTokenStorage,
   })
+  if (providers.ipfsTokenStorage) {
+    await sphere.addTokenStorageProvider(providers.ipfsTokenStorage)
+    console.log('[treasury-agent] IPFS token sync provider registered')
+  } else {
+    console.warn('[treasury-agent] IPFS token sync unavailable — UCT received in browser wallet may not be visible')
+  }
   const nametag = sphere.identity?.nametag || ''
   const direct = sphere.identity?.directAddress || ''
   console.log(`[treasury-agent] wallet ready: ${nametag || direct || 'unknown'}`)
@@ -118,12 +124,24 @@ async function prepareTreasurySphere(sphere) {
   }
 
   try {
-    console.log('[treasury-agent] syncing UCT inventory from network…')
-    await sphere.payments.sync()
+    console.log('[treasury-agent] syncing UCT inventory from IPFS/network…')
+    const syncResult = await sphere.payments.sync()
+    console.log(`[treasury-agent] sync done — added=${syncResult?.added ?? 0} removed=${syncResult?.removed ?? 0}`)
   } catch (e) {
     console.warn('[treasury-agent] payments.sync failed:', e instanceof Error ? e.message : e)
   }
 
+  const human = await logSpendableUct(sphere)
+  if (human <= 0) {
+    console.warn(
+      '[treasury-agent] 0 spendable UCT after sync — deposits may still be in browser-only storage; open @sphere-predict in Sphere once to publish tokens to IPFS, or mint/send UCT directly to this wallet',
+    )
+  }
+
+  return sphere
+}
+
+async function logSpendableUct(sphere) {
   try {
     const assets = await sphere.payments.getAssets()
     const uct = (assets || []).find(a =>
@@ -132,14 +150,11 @@ async function prepareTreasurySphere(sphere) {
     const raw = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
     const human = rawUctToHuman(raw)
     console.log(`[treasury-agent] spendable UCT after sync: ~${human.toFixed(4)} (raw=${raw})`)
-    if (human <= 0) {
-      console.warn('[treasury-agent] 0 spendable UCT in this wallet — check mnemonic matches @sphere-predict or fund the wallet')
-    }
+    return human
   } catch (e) {
     console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
+    return 0
   }
-
-  return sphere
 }
 
 async function getBalance(db, userId) {
