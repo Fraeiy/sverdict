@@ -61,7 +61,7 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
             </p>
           ) : (
             <p className="mb-4 mt-2 text-sm text-[var(--color-text-2)]">
-              Available: {fmtUct(availableBalance)}. Treasury sends from @sphere-predict after you queue.
+              Available: {fmtUct(availableBalance)}. The treasury agent sends from @sphere-predict automatically after you queue.
             </p>
           )}
           <input

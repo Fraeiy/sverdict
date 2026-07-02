@@ -111,8 +111,8 @@ export function AdminPage({ identity, onToast }: Props) {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Pending withdrawals</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Users queue withdrawals from portfolio balance. Send UCT from @sphere-predict, then mark as sent.
+            <p className="mt-1 text-sm text-[var(--color-text-2)]">
+              The treasury agent auto-sends queued withdrawals on testnet2. Use Mark sent only if the agent failed and you paid manually.
             </p>
           </div>
           <button

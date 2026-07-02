@@ -55,6 +55,28 @@ Run `npm run prod:check` before deploying to verify env vars.
 
 ---
 
+## Step 4 — Treasury agent (autonomous withdrawals)
+
+Withdrawals are queued in Supabase; the **treasury agent** sends UCT on testnet2 without manual admin clicks.
+
+1. Apply migration `006_withdrawal_processing.sql` in Supabase SQL Editor
+2. Set GitHub repo secrets (for `.github/workflows/treasury-agent.yml`):
+   - `TREASURY_MNEMONIC` — **secret**, wallet for `@sphere-predict`
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+   - `SPHERE_ORACLE_API_KEY` — testnet2 gateway key (see `@unicitylabs/sphere-sdk` README)
+3. Enable GitHub Actions on the repo — runs every 5 minutes
+
+Local / long-running:
+```bash
+# .env with TREASURY_MNEMONIC + SUPABASE_* then:
+npm run treasury:worker        # one pass
+npm run treasury:worker:loop   # poll every 60s
+```
+
+**Agentic for campaign submission:** autonomous agent fulfills withdrawal queue (payments on network).
+
+---
+
 ## What NOT to use in production
 
 - `api/` folder (legacy, deleted from Vercel deploy)

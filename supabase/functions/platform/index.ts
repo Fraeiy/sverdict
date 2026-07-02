@@ -359,8 +359,8 @@ Deno.serve(async (req) => {
           type: 'withdrawal',
           amount: Number(w.amount),
           direction: 'out',
-          label: w.status === 'completed' ? 'Withdrawal sent' : 'Withdrawal queued',
-          detail: w.status === 'submitted' ? 'Pending treasury send from @sphere-predict' : 'Completed',
+          label: w.status === 'completed' ? 'Withdrawal sent' : w.status === 'processing' ? 'Withdrawal processing' : w.status === 'failed' ? 'Withdrawal failed' : 'Withdrawal queued',
+          detail: w.status === 'submitted' ? 'Queued for treasury agent' : w.status === 'processing' ? 'Treasury agent sending on-chain' : w.status === 'failed' ? (w.failure_reason || 'Failed — balance restored') : 'Completed',
           created_at: w.created_at,
         })),
         ...(trades || []).map(t => ({

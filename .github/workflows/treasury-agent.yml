@@ -1,0 +1,29 @@
+# Autonomous treasury agent — processes withdrawal queue on testnet2.
+# Add repo secrets: TREASURY_MNEMONIC, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Optional: SPHERE_ORACLE_API_KEY (testnet2 gateway key)
+
+name: Treasury Agent
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  fulfill-withdrawals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Run treasury worker
+        env:
+          TREASURY_MNEMONIC: ${{ secrets.TREASURY_MNEMONIC }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
+        run: npm run treasury:worker
