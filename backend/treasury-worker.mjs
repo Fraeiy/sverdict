@@ -22,7 +22,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { Sphere } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
-import { UCT_COIN_ID, normalizeRecipient, toRawString } from './lib/constants.mjs'
+import { UCT_COIN_ID, normalizeRecipient, rawToHuman, toRawString } from './lib/constants.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import {
   sphereDataDirs,
@@ -108,14 +108,25 @@ async function initSphere() {
   return sphere
 }
 
-const UCT_DECIMALS = 18n
+/** Decimals from live UCT asset metadata (set during prepareTreasurySphere). */
+let treasuryUctDecimals = 18
 
-function rawUctToHuman(raw) {
-  const v = BigInt(String(raw || 0))
-  const whole = v / 10n ** UCT_DECIMALS
-  const frac = v % 10n ** UCT_DECIMALS
-  if (frac === 0n) return Number(whole)
-  return Number(whole) + Number(frac) / Number(10n ** UCT_DECIMALS)
+async function getUctBalance(sphere) {
+  const assets = await sphere.payments.getAssets()
+  const uct = (assets || []).find(a =>
+    a.symbol === 'UCT' || a.coinId?.toLowerCase() === UCT_COIN_ID.toLowerCase(),
+  )
+  const decimals = Number(uct?.decimals ?? 18)
+  const rawStr = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
+  const raw = BigInt(String(rawStr || 0))
+  return { raw, decimals, human: rawToHuman(raw, decimals), asset: uct }
+}
+
+function logUctBalance(bal, phase = '') {
+  const label = phase ? ` ${phase}` : ''
+  console.log(
+    `[treasury-agent] spendable UCT${label}: ~${bal.human.toFixed(4)} (raw=${bal.raw}, decimals=${bal.decimals})`,
+  )
 }
 
 async function prepareTreasurySphere(sphere) {
@@ -155,42 +166,31 @@ async function prepareTreasurySphere(sphere) {
     console.warn('[treasury-agent] payments.sync failed:', e instanceof Error ? e.message : e)
   }
 
-  let human = await logSpendableUct(sphere, 'after ingest')
+  let bal = await getUctBalance(sphere).catch(e => {
+    console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
+    return { raw: 0n, decimals: 18, human: 0, asset: null }
+  })
+  logUctBalance(bal, 'after ingest')
+  treasuryUctDecimals = bal.decimals
 
-  if (human <= 0 && treasuryAutoMintEnabled()) {
+  const minRaw = BigInt(toRawString(1, bal.decimals))
+  if (bal.raw < minRaw && treasuryAutoMintEnabled()) {
     const topup = treasuryMintTopupUct()
-    console.log(`[treasury-agent] testnet auto-mint ${topup} UCT (deposits sit in browser/IPFS; agent mints spendable tokens on testnet2)`)
+    console.log(`[treasury-agent] testnet auto-mint ${topup} UCT (spendable below 1 UCT)`)
     const minted = await sphere.payments.mintFungibleToken(UCT_COIN_ID, topup)
     if (minted?.success) {
       console.log(`[treasury-agent] mint ok — token ${minted.tokenId || minted.token?.id || 'created'}`)
-      human = await logSpendableUct(sphere, 'after mint')
+      bal = await getUctBalance(sphere)
+      treasuryUctDecimals = bal.decimals
+      logUctBalance(bal, 'after mint')
     } else {
       console.warn('[treasury-agent] auto-mint failed:', minted?.error || 'unknown error')
     }
-  } else if (human <= 0) {
-    console.warn(
-      '[treasury-agent] 0 spendable UCT — enable testnet auto-mint (default on) or open @sphere-predict in Sphere browser to sync tokens',
-    )
+  } else if (bal.raw < minRaw) {
+    console.warn('[treasury-agent] insufficient spendable UCT for 1 UCT send — enable testnet auto-mint (default on)')
   }
 
   return sphere
-}
-
-async function logSpendableUct(sphere, phase = '') {
-  try {
-    const assets = await sphere.payments.getAssets()
-    const uct = (assets || []).find(a =>
-      a.symbol === 'UCT' || a.coinId?.toLowerCase() === UCT_COIN_ID.toLowerCase(),
-    )
-    const raw = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
-    const human = rawUctToHuman(raw)
-    const label = phase ? ` ${phase}` : ''
-    console.log(`[treasury-agent] spendable UCT${label}: ~${human.toFixed(4)} (raw=${raw})`)
-    return human
-  } catch (e) {
-    console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
-    return 0
-  }
 }
 
 async function getBalance(db, userId) {
@@ -305,10 +305,11 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
     if (lockErr || !locked) continue
 
     try {
-      console.log(`[treasury-agent] sending ${amount} UCT → ${recipient} (${w.id})`)
+      const sendRaw = toRawString(amount, treasuryUctDecimals)
+      console.log(`[treasury-agent] sending ${amount} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`)
       const result = await sphere.payments.send({
         recipient,
-        amount: toRawString(amount),
+        amount: sendRaw,
         coinId: UCT_COIN_ID,
         memo,
       })
