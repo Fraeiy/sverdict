@@ -1,6 +1,6 @@
-# Autonomous treasury agent — processes withdrawal queue on testnet2.
-# Add repo secrets: TREASURY_MNEMONIC, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-# Optional: SPHERE_ORACLE_API_KEY (defaults to public testnet2 key if unset)
+# Autonomous treasury agent — processes withdrawal queue on testnet2 (v2 wallet-api).
+# Secrets: TREASURY_MNEMONIC, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Optional: SPHERE_ORACLE_API_KEY, TREASURY_DEVICE_ID (else persisted in .treasury-data cache)
 
 name: Treasury Agent
 
@@ -36,4 +36,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
-        run: npm run treasury:worker
+        run: |
+          npm run treasury:worker
+          npm run dm:worker

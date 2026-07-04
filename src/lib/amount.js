@@ -1,4 +1,5 @@
-const DECIMALS = 18
+/** UCT base units per TokenRegistry (8 decimals on testnet2). */
+const DECIMALS = 8
 
 export function toHuman(raw) {
   if (raw == null) return '0'

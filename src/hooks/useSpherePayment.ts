@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { getTreasuryAddressFallback } from '../lib/config'
+import { buildDepositMemo } from '../lib/paymentMemos'
 import { resolveCoinId } from '../lib/sphereCoins'
 
 type WalletLike = {
@@ -11,20 +12,21 @@ type WalletLike = {
 export function useSpherePayment(wallet: WalletLike, treasuryAddress?: string) {
   const treasury = treasuryAddress || getTreasuryAddressFallback() || '@sphere-predict'
 
-  const depositToPortfolio = useCallback(async (amount: number) => {
+  const depositToPortfolio = useCallback(async (amount: number, userId?: string) => {
     if (!wallet.sendPayment) throw new Error('Sphere wallet not ready')
     const n = Number(amount)
     if (!n || n <= 0) throw new Error('Enter a valid deposit amount')
 
+    const memo = buildDepositMemo(userId)
     const result = await wallet.sendPayment({
       recipient: treasury,
       amountHuman: n,
       coinId: resolveCoinId('UCT'),
-      memo: 'SPHERE_PREDICT_DEPOSIT',
+      memo,
     })
 
     await wallet.refreshBalance?.()
-    return { result, txReference: extractTxReference(result) }
+    return { result, txReference: extractTxReference(result), memo }
   }, [wallet, treasury])
 
   return { depositToPortfolio, treasury }

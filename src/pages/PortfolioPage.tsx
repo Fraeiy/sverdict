@@ -49,8 +49,8 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
   async function handleDeposit(amount: number) {
     try {
       onToast('Approve deposit in your Sphere wallet…', 'info')
-      const payment = await depositToPortfolio(amount)
-      await deposit(amount, payment.txReference)
+      const payment = await depositToPortfolio(amount, platform.user?.id)
+      await deposit(amount, payment.txReference, payment.memo)
       await wallet.refreshBalance?.()
       await refresh()
       await refreshHistory()

@@ -297,7 +297,7 @@ export function useWalletConnect() {
   }, [intent])
 
   /** Send UCT — opens Sphere wallet for user to sign & confirm.
-   *  amountHuman is human UCT (e.g. 50). Connect v2 expects raw base units (18 decimals).
+   *  amountHuman is human UCT (e.g. 50). Connect v2 expects raw base units (UCT = 8 decimals).
    */
   const sendPayment = useCallback(async ({ recipient, amountHuman, coinId = 'UCT', memo }) => {
     const to = normalizeRecipient(recipient)

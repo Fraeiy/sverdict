@@ -3,6 +3,9 @@ import {
   getDeposits, getWithdrawals, getNotifications, getResolutions,
   persist, newId, seedMarketsIfEmpty,
 } from './store.mjs'
+import { buildSeedMemo } from '../../src/lib/paymentMemos.js'
+
+const MARKET_SEED_LIQUIDITY_UCT = Number(process.env.MARKET_SEED_LIQUIDITY_UCT || 100)
 
 const ADMIN_WALLETS = new Set([
   'sphere-predict',
@@ -234,7 +237,31 @@ export async function placeTrade({ userId, marketId, side, amount, signature, si
   return { trade, position, market }
 }
 
+function resolveTreasuryUserId(users, fallbackUserId) {
+  const treasury = users.find(u =>
+    (u.nametag || '').replace(/^@/, '').toLowerCase() === 'sphere-predict' ||
+    isAdminWallet(u.nametag) ||
+    isAdminWallet(u.wallet_address),
+  )
+  return treasury?.id || fallbackUserId
+}
+
 export async function createMarket({ userId, question, category, daysOpen, description }) {
+  const users = await getUsers()
+  const treasuryUserId = resolveTreasuryUserId(users, userId)
+  const seedTotal = MARKET_SEED_LIQUIDITY_UCT
+  const seedPerSide = seedTotal > 0 ? seedTotal / 2 : 0
+
+  if (seedTotal > 0) {
+    const bal = await getUserBalance(treasuryUserId)
+    if (bal < seedTotal) {
+      throw new Error(
+        `Treasury portfolio needs at least ${seedTotal} UCT to seed liquidity (50/50 YES/NO). Current: ${bal.toFixed(2)} UCT.`,
+      )
+    }
+    await setBalance(treasuryUserId, bal - seedTotal)
+  }
+
   const markets = await getMarkets()
   const market = {
     id: newId(),
@@ -243,10 +270,11 @@ export async function createMarket({ userId, question, category, daysOpen, descr
     category: category || 'GENERAL',
     status: 'open',
     deadline: new Date(Date.now() + Number(daysOpen || 7) * 864e5).toISOString(),
-    yes_pool: 0,
-    no_pool: 0,
-    volume: 0,
-    trending_score: 10,
+    yes_pool: seedPerSide,
+    no_pool: seedPerSide,
+    volume: seedTotal,
+    seed_liquidity: seedTotal,
+    trending_score: 10 + seedTotal * 0.1,
     resolution: null,
     resolved_at: null,
     created_by: userId,
@@ -254,6 +282,18 @@ export async function createMarket({ userId, question, category, daysOpen, descr
   }
   markets.unshift(market)
   await persist('markets')
+
+  if (seedTotal > 0) {
+    const paymentMemo = buildSeedMemo({ userId: treasuryUserId, marketId: market.id, amount: seedTotal })
+    await addNotification(
+      treasuryUserId,
+      'market',
+      'Liquidity seeded',
+      `${seedTotal} UCT (50 YES / 50 NO) added to "${String(question).slice(0, 60)}".`,
+      { marketId: market.id, seedTotal, payment_memo: paymentMemo },
+    )
+  }
+
   return market
 }
 

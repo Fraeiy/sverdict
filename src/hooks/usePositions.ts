@@ -39,9 +39,9 @@ export function usePositions(identity: WalletIdentity | null) {
     return () => clearInterval(interval)
   }, [auth, refresh])
 
-  const deposit = useCallback(async (amount: number, txReference?: string) => {
+  const deposit = useCallback(async (amount: number, txReference?: string, paymentMemo?: string) => {
     if (!auth) throw new Error('Connect your Sphere wallet')
-    const result = await api.deposit(auth, amount, txReference)
+    const result = await api.deposit(auth, amount, txReference, paymentMemo)
     setPortfolio(result.portfolio)
     return result.portfolio
   }, [auth])

@@ -159,6 +159,9 @@ export function AdminPage({ identity, onToast }: Props) {
 
       <div className="card mt-8 p-6">
         <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Create market</h2>
+        <p className="mb-4 text-sm text-[var(--color-text-2)]">
+          Each new market seeds <strong className="text-[var(--color-gold)]">100 UCT</strong> from the @sphere-predict treasury portfolio — 50 YES / 50 NO — so odds start at 50% with real liquidity.
+        </p>
         <div className="space-y-4">
           <input
             value={question}

@@ -1,4 +1,14 @@
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  assertDepositMemo,
+  buildDepositMemo,
+  buildSeedMemo,
+  buildSettleMemo,
+  buildStakeMemo,
+  buildWithdrawMemo,
+} from '../paymentMemos.ts'
+
+const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -110,6 +120,76 @@ async function setBalance(db: SupabaseClient, userId: string, amount: number) {
 
 async function notify(db: SupabaseClient, userId: string, type: string, title: string, body: string, metadata: Record<string, unknown> = {}) {
   await db.from('notifications').insert({ user_id: userId, type, title, body, metadata })
+}
+
+function resolveTreasuryUserId(
+  users: { id: string; nametag?: string | null; wallet_address?: string; is_admin?: boolean }[],
+  fallbackUserId: string,
+) {
+  const treasury = users.find(u =>
+    (u.nametag || '').replace(/^@/, '').toLowerCase() === 'sphere-predict' ||
+    isAdminWallet(u.nametag) ||
+    isAdminWallet(u.wallet_address),
+  )
+  return treasury?.id || fallbackUserId
+}
+
+function marketSeedAmounts() {
+  const seedTotal = MARKET_SEED_LIQUIDITY_UCT
+  if (!seedTotal || seedTotal <= 0) return { seedTotal: 0, seedPerSide: 0 }
+  return { seedTotal, seedPerSide: seedTotal / 2 }
+}
+
+function dmRecipientFromUser(user: { nametag?: string | null; wallet_address?: string | null } | null | undefined) {
+  if (!user) return null
+  const tag = String(user.nametag || '').trim().replace(/^@/, '')
+  if (tag) return `@${tag}`
+  const wallet = String(user.wallet_address || '').trim()
+  return wallet || null
+}
+
+function formatMarketWinDm(payout: number, question: string) {
+  const q = String(question || 'market')
+  const short = q.length > 80 ? `${q.slice(0, 77)}...` : q
+  return `Sphere Predict: You won! ${payout.toFixed(2)} UCT credited to your portfolio for "${short}". Bet again or withdraw anytime.`
+}
+
+function formatWithdrawalSentDm(amount: number, txReference?: string) {
+  const ref = txReference ? ` Ref: ${txReference}` : ''
+  return `Sphere Predict: ${amount.toFixed(2)} UCT sent to your Sphere wallet.${ref}`
+}
+
+async function queueOutboundDm(
+  db: SupabaseClient,
+  opts: {
+    userId: string
+    recipient: string | null
+    content: string
+    kind: 'market_win' | 'withdrawal_sent' | 'market_lost'
+    metadata?: Record<string, unknown>
+  },
+) {
+  const { userId, recipient, content, kind, metadata = {} } = opts
+  if (!recipient) {
+    await db.from('outbound_dms').insert({
+      user_id: userId,
+      recipient: 'unknown',
+      content,
+      kind,
+      status: 'skipped',
+      failure_reason: 'User has no nametag or wallet address for Sphere DM',
+      metadata,
+    })
+    return
+  }
+  await db.from('outbound_dms').insert({
+    user_id: userId,
+    recipient,
+    content,
+    kind,
+    status: 'pending',
+    metadata,
+  })
 }
 
 async function getPortfolio(db: SupabaseClient, userId: string) {
@@ -266,15 +346,21 @@ async function placeTrade(db: SupabaseClient, userId: string, payload: Record<st
     if (posErr) throw new Error(`Failed to open position: ${posErr.message}`)
   }
 
-  const { error: tradeErr } = await db.from('trades').insert({
+  const tradeMemo = buildStakeMemo({ userId, marketId, side })
+  const { data: tradeRow, error: tradeErr } = await db.from('trades').insert({
     user_id: userId,
     market_id: marketId,
     side,
     quantity: cost,
     price,
     total_cost: cost,
-  })
+    payment_memo: tradeMemo,
+  }).select('id').single()
   if (tradeErr) throw new Error(`Failed to record trade: ${tradeErr.message}`)
+  if (tradeRow?.id) {
+    const memoWithTrade = buildStakeMemo({ userId, marketId, side, tradeId: tradeRow.id })
+    await db.from('trades').update({ payment_memo: memoWithTrade }).eq('id', tradeRow.id)
+  }
 
   await notify(db, userId, 'trade', 'Trade executed', `Bought ${side} for ${cost.toFixed(2)} UCT from your portfolio.`, { marketId, side, amount: cost }).catch(() => {})
   return getPortfolio(db, userId)
@@ -354,7 +440,7 @@ Deno.serve(async (req) => {
           amount: Number(d.amount),
           direction: 'in',
           label: 'Deposit',
-          detail: d.tx_reference || null,
+          detail: d.payment_memo || d.tx_reference || null,
           created_at: d.created_at,
         })),
         ...(withdrawals || []).map(w => ({
@@ -363,7 +449,7 @@ Deno.serve(async (req) => {
           amount: Number(w.amount),
           direction: 'out',
           label: w.status === 'completed' ? 'Withdrawal sent' : w.status === 'processing' ? 'Withdrawal processing' : w.status === 'failed' ? 'Withdrawal failed' : 'Withdrawal queued',
-          detail: w.status === 'submitted' ? 'Queued for treasury agent' : w.status === 'processing' ? 'Treasury agent sending on-chain' : w.status === 'failed' ? (w.failure_reason || 'Failed — balance restored') : 'Completed',
+          detail: w.payment_memo || (w.status === 'submitted' ? 'Queued for treasury agent' : w.status === 'processing' ? 'Treasury agent sending on-chain' : w.status === 'failed' ? (w.failure_reason || 'Failed — balance restored') : w.tx_reference || 'Completed'),
           created_at: w.created_at,
         })),
         ...(trades || []).map(t => ({
@@ -372,7 +458,7 @@ Deno.serve(async (req) => {
           amount: Number(t.total_cost),
           direction: 'out',
           label: `Trade ${t.side}`,
-          detail: marketMap.get(t.market_id) || t.market_id,
+          detail: t.payment_memo || marketMap.get(t.market_id) || t.market_id,
           market_id: t.market_id,
           created_at: t.created_at,
         })),
@@ -382,7 +468,7 @@ Deno.serve(async (req) => {
           amount: Number(s.payout),
           direction: 'in',
           label: 'Market payout',
-          detail: marketMap.get(s.market_id) || s.market_id,
+          detail: buildSettleMemo({ userId: s.user_id, marketId: s.market_id, positionId: s.id }),
           market_id: s.market_id,
           created_at: s.settled_at || s.created_at,
         })),
@@ -393,10 +479,15 @@ Deno.serve(async (req) => {
     if (route === '/deposits' && req.method === 'POST') {
       const amount = Number(payload.amount)
       if (!amount || amount <= 0) throw new Error('Invalid deposit amount')
+      const paymentMemo = payload.paymentMemo
+        ? String(payload.paymentMemo)
+        : buildDepositMemo(user.id)
+      assertDepositMemo(paymentMemo, user.id)
       const { error: depErr } = await db.from('deposits').insert({
         user_id: user.id,
         amount,
         tx_reference: payload.txReference || null,
+        payment_memo: paymentMemo,
         status: 'confirmed',
         confirmed_at: new Date().toISOString(),
       })
@@ -419,6 +510,8 @@ Deno.serve(async (req) => {
         status: 'submitted',
       }).select().single()
       if (wErr) throw wErr
+      const withdrawMemo = buildWithdrawMemo(withdrawal.id)
+      await db.from('withdrawals').update({ payment_memo: withdrawMemo }).eq('id', withdrawal.id)
       await notify(
         db,
         user.id,
@@ -439,17 +532,61 @@ Deno.serve(async (req) => {
     if (!admin) return json({ error: 'Admin access required' }, 403)
 
     if (route === '/admin/markets' && req.method === 'POST') {
+      const question = String(payload.question || '').trim()
+      if (!question) throw new Error('Market question is required')
+
+      const { seedTotal, seedPerSide } = marketSeedAmounts()
+      const { data: allUsers } = await db.from('users').select('id, nametag, wallet_address, is_admin')
+      const treasuryUserId = resolveTreasuryUserId(allUsers || [], user.id)
+
+      if (seedTotal > 0) {
+        const bal = await getBalance(db, treasuryUserId)
+        if (bal < seedTotal) {
+          throw new Error(
+            `Treasury portfolio needs at least ${seedTotal} UCT to seed liquidity (50/50 YES/NO). Current: ${bal.toFixed(2)} UCT.`,
+          )
+        }
+      }
+
       const { data, error } = await db.from('markets').insert({
-        question: payload.question,
+        question,
         description: payload.description || null,
         resolution_criteria: payload.resolutionCriteria || payload.resolution_criteria || null,
         category: payload.category || 'GENERAL',
         status: 'open',
         deadline: new Date(Date.now() + Number(payload.daysOpen || 7) * 864e5).toISOString(),
         created_by: user.id,
-        trending_score: 10,
+        trending_score: 10 + seedTotal * 0.1,
+        yes_pool: seedPerSide,
+        no_pool: seedPerSide,
+        volume: seedTotal,
+        seed_liquidity: seedTotal,
       }).select().single()
       if (error) throw error
+
+      if (seedTotal > 0) {
+        const bal = await getBalance(db, treasuryUserId)
+        try {
+          await setBalance(db, treasuryUserId, bal - seedTotal)
+        } catch (e) {
+          await db.from('markets').delete().eq('id', data.id)
+          throw e
+        }
+        const paymentMemo = buildSeedMemo({ userId: treasuryUserId, marketId: data.id, amount: seedTotal })
+        await notify(
+          db,
+          treasuryUserId,
+          'market',
+          'Liquidity seeded',
+          `${seedTotal} UCT (50 YES / 50 NO) added to "${question.slice(0, 60)}".`,
+          { marketId: data.id, seedTotal, seedPerSide, payment_memo: paymentMemo },
+        ).catch(() => {})
+        return json({
+          market: data,
+          seed: { total: seedTotal, perSide: seedPerSide, payment_memo: paymentMemo },
+        })
+      }
+
       return json({ market: data })
     }
 
@@ -479,6 +616,11 @@ Deno.serve(async (req) => {
       const totalPool = Number(market.yes_pool) + Number(market.no_pool)
       const winningPool = res === 'YES' ? Number(market.yes_pool) : Number(market.no_pool)
       const { data: openPositions } = await db.from('positions').select('*').eq('market_id', marketId).eq('status', 'open')
+      const userIds = [...new Set((openPositions || []).map(p => p.user_id))]
+      const { data: dmUsers } = userIds.length
+        ? await db.from('users').select('id, nametag, wallet_address').in('id', userIds)
+        : { data: [] as { id: string; nametag?: string | null; wallet_address?: string | null }[] }
+      const userMap = new Map((dmUsers || []).map(u => [u.id, u]))
 
       let totalPayout = 0
       for (const pos of openPositions || []) {
@@ -492,6 +634,7 @@ Deno.serve(async (req) => {
           const bal = await getBalance(db, pos.user_id)
           await setBalance(db, pos.user_id, bal + payout)
         }
+        const settleMemo = buildSettleMemo({ userId: pos.user_id, marketId, positionId: pos.id })
         await db.from('positions').update({
           status: 'settled',
           payout,
@@ -507,8 +650,19 @@ Deno.serve(async (req) => {
           won
             ? `${payout.toFixed(2)} UCT credited to your portfolio. Withdraw anytime.`
             : `Market resolved ${res}.`,
-          { marketId, payout, pnl, won },
+          { marketId, payout, pnl, won, payment_memo: settleMemo },
         )
+
+        if (won && payout > 0) {
+          const dmUser = userMap.get(pos.user_id)
+          await queueOutboundDm(db, {
+            userId: pos.user_id,
+            recipient: dmRecipientFromUser(dmUser),
+            content: formatMarketWinDm(payout, market.question),
+            kind: 'market_win',
+            metadata: { marketId, positionId: pos.id, payout },
+          }).catch(() => {})
+        }
       }
 
       await db.from('market_resolutions').insert({
@@ -535,10 +689,13 @@ Deno.serve(async (req) => {
       const { data: w, error } = await db.from('withdrawals').select('*, users(*)').eq('id', withdrawalId).single()
       if (error || !w) throw new Error('Withdrawal not found')
       if (w.status === 'completed') throw new Error('Already fulfilled')
+      const txRef = payload.txReference ? String(payload.txReference) : `treasury_send_${Date.now()}`
+      const withdrawMemo = buildWithdrawMemo(withdrawalId)
       await db.from('withdrawals').update({
         status: 'completed',
         completed_at: new Date().toISOString(),
-        tx_reference: payload.txReference ? String(payload.txReference) : `treasury_send_${Date.now()}`,
+        tx_reference: txRef,
+        payment_memo: withdrawMemo,
       }).eq('id', withdrawalId)
       const recipient = w.users?.nametag || w.users?.wallet_address || 'user'
       await notify(
@@ -547,8 +704,15 @@ Deno.serve(async (req) => {
         'withdrawal',
         'Withdrawal sent',
         `${Number(w.amount).toFixed(2)} UCT sent from @sphere-predict to ${recipient}.`,
-        { withdrawalId, amount: w.amount },
+        { withdrawalId, amount: w.amount, txReference: txRef },
       ).catch(() => {})
+      await queueOutboundDm(db, {
+        userId: w.user_id,
+        recipient: dmRecipientFromUser(w.users),
+        content: formatWithdrawalSentDm(Number(w.amount), txRef),
+        kind: 'withdrawal_sent',
+        metadata: { withdrawalId, amount: w.amount, txReference: txRef },
+      }).catch(() => {})
       return json({ ok: true })
     }
 

@@ -22,6 +22,8 @@
     "treasury:worker:loop": "node backend/treasury-worker.mjs --loop",
     "treasury:worker:dry-run": "node backend/treasury-worker.mjs --dry-run",
     "treasury:worker:status": "node backend/treasury-worker.mjs --status",
+    "dm:worker": "node backend/dm-worker.mjs",
+    "dm:worker:dry-run": "node backend/dm-worker.mjs --dry-run",
     "lint": "eslint .",
     "preview:legacy": "vite preview"
   },

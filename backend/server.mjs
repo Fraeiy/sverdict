@@ -5,9 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyMarketPacket, cloneSeedMarkets, normalizeMarket } from '../src/lib/marketState.js'
 import { decodeMarketPacket } from '../src/lib/marketProtocol.js'
-import { Sphere } from '@unicitylabs/sphere-sdk'
-import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
-import { sphereDataDirs, sphereNetwork, sphereOracleApiKey, sphereTokenSync } from './lib/sphereConfig.mjs'
+import { initTreasurySphere } from './lib/sphereProviders.mjs'
+import { buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { initPlatform } from './platform/engine.mjs'
 import { handlePlatformApi } from './platform/routes.mjs'
 import { setTreasury } from './platform/store.mjs'
@@ -18,7 +17,7 @@ const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const APP_DIR = path.resolve(ROOT_DIR, '..')
 const DIST_DIR = path.join(APP_DIR, 'dist')
 
-// Persistence directory. Override with DATA_DIR env for Fly volumes etc.
+// Persistence directory. Override with DATA_DIR for a custom data path.
 // Default keeps data next to this file for local/dev runs.
 const DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
@@ -123,35 +122,14 @@ function debitBalance(address, amount) {
 
 async function initTreasury() {
   try {
-    const network = sphereNetwork()
-    const { dataDir, tokensDir } = sphereDataDirs()
-    const providers = createNodeProviders({
-      network,
-      dataDir,
-      tokensDir,
-      oracle: { apiKey: sphereOracleApiKey() },
-      tokenSync: sphereTokenSync(),
-    })
     const mnemonic = process.env.TREASURY_MNEMONIC
-    const initOptions = {
-      network,
-      storage: providers.storage,
-      transport: providers.transport,
-      oracle: providers.oracle,
-      tokenStorage: providers.tokenStorage,
-      price: providers.price,
-      groupChat: providers.groupChat,
-      market: providers.market,
-      ...(mnemonic ? { mnemonic } : { autoGenerate: true }),
-    }
     if (!mnemonic) {
       console.warn('⚠️  No TREASURY_MNEMONIC env var set. Using auto-generated treasury wallet for this run. Set TREASURY_MNEMONIC for persistent treasury.')
     }
-    const { sphere } = await Sphere.init(initOptions)
-    if (providers.ipfsTokenStorage) {
-      await sphere.addTokenStorageProvider(providers.ipfsTokenStorage)
-    }
-    treasurySphere = sphere
+    treasurySphere = await initTreasurySphere({
+      mnemonic: mnemonic || undefined,
+      autoGenerate: !mnemonic,
+    })
     TREASURY_ADDRESS = sphere.identity?.directAddress || 'unknown'
     console.log('Treasury wallet ready. Address for deposits:', TREASURY_ADDRESS)
   } catch (err) {
@@ -251,7 +229,7 @@ async function handlePacket(content) {
             recipient: who,
             amount: String(amount),
             coinId: 'UCT',
-            memo: `SPHERE_PREDICT_WITHDRAW:${who}`
+            memo: buildWithdrawMemo(packet.id || who)
           })
         } catch (e) {
           console.warn('Treasury withdraw send failed, re-crediting balance:', e?.message || e)

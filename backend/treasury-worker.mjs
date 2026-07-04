@@ -20,18 +20,11 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { Sphere } from '@unicitylabs/sphere-sdk'
-import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { UCT_COIN_ID, normalizeRecipient, rawToHuman, toRawString } from './lib/constants.mjs'
+import { buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
-import {
-  sphereDataDirs,
-  sphereNetwork,
-  sphereOracleApiKey,
-  sphereTokenSync,
-  treasuryAutoMintEnabled,
-  treasuryMintTopupUct,
-} from './lib/sphereConfig.mjs'
+import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
+import { getUctDecimals, initTreasurySphere } from './lib/sphereProviders.mjs'
 
 loadProjectEnv()
 
@@ -73,43 +66,16 @@ function txReference(result) {
 
 async function initSphere() {
   const mnemonic = requireEnv('TREASURY_MNEMONIC')
-  const network = sphereNetwork()
-  if (!network) throw new Error('SPHERE_NETWORK resolved empty — set SPHERE_NETWORK=testnet or unset it')
-  const { dataDir, tokensDir } = sphereDataDirs()
-  console.log(`[treasury-agent] initializing Sphere wallet (network=${network})`)
-  const providers = createNodeProviders({
-    network,
-    dataDir,
-    tokensDir,
-    oracle: { apiKey: sphereOracleApiKey() },
-    tokenSync: sphereTokenSync(),
-  })
-  // createNodeProviders does NOT return `network` — pass it explicitly to Sphere.init
-  const { sphere } = await Sphere.init({
-    network,
-    mnemonic,
-    storage: providers.storage,
-    transport: providers.transport,
-    oracle: providers.oracle,
-    tokenStorage: providers.tokenStorage,
-    price: providers.price,
-    groupChat: providers.groupChat,
-    market: providers.market,
-  })
-  if (providers.ipfsTokenStorage) {
-    await sphere.addTokenStorageProvider(providers.ipfsTokenStorage)
-    console.log('[treasury-agent] IPFS token sync provider registered')
-  } else {
-    console.warn('[treasury-agent] IPFS token sync unavailable — UCT received in browser wallet may not be visible')
-  }
+  console.log('[treasury-agent] initializing Sphere wallet (v2 wallet-api providers)')
+  const sphere = await initTreasurySphere({ mnemonic })
   const nametag = sphere.identity?.nametag || ''
   const direct = sphere.identity?.directAddress || ''
   console.log(`[treasury-agent] wallet ready: ${nametag || direct || 'unknown'}`)
   return sphere
 }
 
-/** Decimals from live UCT asset metadata (set during prepareTreasurySphere). */
-let treasuryUctDecimals = 18
+/** UCT decimals from TokenRegistry / live asset metadata (set during prepareTreasurySphere). */
+let treasuryUctDecimals = 8
 
 async function getUctBalance(sphere) {
   const assets = await sphere.payments.getAssets()
@@ -142,15 +108,7 @@ async function prepareTreasurySphere(sphere) {
   }
 
   try {
-    console.log('[treasury-agent] connecting Nostr transport…')
-    await sphere.reconnect()
-    console.log('[treasury-agent] transport connected')
-  } catch (e) {
-    console.warn('[treasury-agent] transport connect failed:', e instanceof Error ? e.message : e)
-  }
-
-  try {
-    console.log('[treasury-agent] receiving pending token transfers (Nostr)…')
+    console.log('[treasury-agent] draining wallet-api mailbox…')
     const received = await sphere.payments.receive()
     const n = received?.transfers?.length ?? 0
     console.log(`[treasury-agent] receive done — new transfers=${n}`)
@@ -159,38 +117,30 @@ async function prepareTreasurySphere(sphere) {
   }
 
   try {
-    console.log('[treasury-agent] syncing token inventory (IPFS)…')
+    console.log('[treasury-agent] syncing optional IPFS token backup…')
     const syncResult = await sphere.payments.sync()
     console.log(`[treasury-agent] sync done — added=${syncResult?.added ?? 0} removed=${syncResult?.removed ?? 0}`)
   } catch (e) {
     console.warn('[treasury-agent] payments.sync failed:', e instanceof Error ? e.message : e)
   }
 
+  treasuryUctDecimals = getUctDecimals()
+
   let bal = await getUctBalance(sphere).catch(e => {
     console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
-    return { raw: 0n, decimals: 18, human: 0, asset: null }
+    return { raw: 0n, decimals: treasuryUctDecimals, human: 0, asset: null }
   })
-  logUctBalance(bal, 'after ingest')
-  treasuryUctDecimals = bal.decimals
-
-  const minRaw = BigInt(toRawString(1, bal.decimals))
-  if (bal.raw < minRaw && treasuryAutoMintEnabled()) {
-    const topup = treasuryMintTopupUct()
-    console.log(`[treasury-agent] testnet auto-mint ${topup} UCT (spendable below 1 UCT)`)
-    const minted = await sphere.payments.mintFungibleToken(UCT_COIN_ID, topup)
-    if (minted?.success) {
-      console.log(`[treasury-agent] mint ok — token ${minted.tokenId || minted.token?.id || 'created'}`)
-      bal = await getUctBalance(sphere)
-      treasuryUctDecimals = bal.decimals
-      logUctBalance(bal, 'after mint')
-    } else {
-      console.warn('[treasury-agent] auto-mint failed:', minted?.error || 'unknown error')
-    }
-  } else if (bal.raw < minRaw) {
-    console.warn('[treasury-agent] insufficient spendable UCT for 1 UCT send — enable testnet auto-mint (default on)')
-  }
+  if (bal.decimals) treasuryUctDecimals = bal.decimals
+  logUctBalance(bal, 'wallet-api inventory')
 
   return sphere
+}
+
+async function refreshSpendableInventory(sphere) {
+  try {
+    await sphere.payments.receive()
+  } catch { /* best-effort */ }
+  return getUctBalance(sphere)
 }
 
 async function getBalance(db, userId) {
@@ -217,7 +167,7 @@ async function notify(db, userId, title, body, metadata = {}) {
   if (error) console.warn('[treasury-agent] notify failed:', error.message)
 }
 
-function isTreasuryFundsError(reason) {
+function isSpendableInventoryError(reason) {
   return /insufficient balance/i.test(reason)
 }
 
@@ -287,7 +237,7 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
     }
 
     const recipient = normalizeRecipient(recipientRaw)
-    const memo = `SPHERE_PREDICT_WITHDRAW:${w.id}`
+    const memo = buildWithdrawMemo(w.id)
 
     if (dryRun) {
       console.log(`  → would send ${amount} UCT to ${recipient} (${w.id}) memo=${memo}`)
@@ -305,19 +255,31 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
     if (lockErr || !locked) continue
 
     try {
-      const sendRaw = toRawString(amount, treasuryUctDecimals)
+      const sendRaw = BigInt(toRawString(amount, treasuryUctDecimals))
+      let bal = await refreshSpendableInventory(sphere)
+      if (bal.raw < sendRaw) {
+        console.warn(
+          `[treasury-agent] agent inventory raw=${bal.raw} < needed ${sendRaw} — @sphere-predict is funded; check TREASURY_MNEMONIC / TREASURY_DEVICE_ID match the browser wallet`,
+        )
+        bal = await refreshSpendableInventory(sphere)
+      }
+
       console.log(`[treasury-agent] sending ${amount} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`)
       const result = await sphere.payments.send({
         recipient,
-        amount: sendRaw,
-        coinId: UCT_COIN_ID,
+        amount: String(sendRaw),
+        coinId: 'UCT',
         memo,
       })
+      if (result?.deliveryPending) {
+        console.log(`[treasury-agent] ${w.id} certified on-chain; mailbox delivery deferred (normal v2 behavior)`)
+      }
       const ref = txReference(result)
       await db.from('withdrawals').update({
         status: 'completed',
         completed_at: new Date().toISOString(),
         tx_reference: String(ref),
+        payment_memo: memo,
         failure_reason: null,
       }).eq('id', w.id)
 
@@ -328,15 +290,21 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         `${amount.toFixed(2)} UCT sent from treasury to ${recipient}.`,
         { withdrawalId: w.id, amount, txReference: ref, agent: 'treasury-worker' },
       )
+      await queueWithdrawalSentDm(db, w.users, {
+        amount,
+        txReference: ref,
+        withdrawalId: w.id,
+        paymentMemo: memo,
+      }).catch(e => console.warn('[treasury-agent] DM queue failed:', e instanceof Error ? e.message : e))
       console.log(`[treasury-agent] completed ${w.id} tx=${ref}`)
       processed += 1
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e)
       console.error(`[treasury-agent] failed ${w.id}:`, reason)
-      const treasuryEmpty = isTreasuryFundsError(reason)
+      const inventoryMismatch = isSpendableInventoryError(reason)
       await failWithdrawal(db, w, reason, {
-        recredit: !treasuryEmpty,
-        requeue: treasuryEmpty,
+        recredit: !inventoryMismatch,
+        requeue: inventoryMismatch,
       })
     }
   }
@@ -358,7 +326,7 @@ async function failWithdrawal(db, w, reason, { recredit = false, requeue = false
     }).eq('id', w.id)
     if (error) console.error(`[treasury-agent] requeue ${w.id} failed:`, error.message)
     console.warn(
-      `[treasury-agent] requeued ${w.id} — @sphere-predict treasury needs more on-chain UCT (deposits fund the ledger; treasury wallet must hold UCT to pay out)`,
+      `[treasury-agent] requeued ${w.id} — spendable inventory low in agent (wallet is funded; verify mnemonic + deviceId match @sphere-predict wallet-api session)`,
     )
     return
   }
@@ -398,7 +366,8 @@ async function runOnce() {
 
   const sphere = await prepareTreasurySphere(await initSphere())
   const n = await processWithdrawals(db, sphere)
-  console.log(`[treasury-agent] done — processed ${n} withdrawal(s)`)
+  const dms = await processOutboundDms(db, sphere)
+  console.log(`[treasury-agent] done — processed ${n} withdrawal(s), sent ${dms} DM(s)`)
 }
 
 async function main() {

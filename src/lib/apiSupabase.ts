@@ -111,8 +111,8 @@ export async function fetchHistory(auth: AuthHeaders) {
   }
 }
 
-export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
-  return invoke<{ portfolio: Portfolio }>('/deposits', { auth, payload: { amount, txReference } })
+export async function deposit(auth: AuthHeaders, amount: number, txReference?: string, paymentMemo?: string) {
+  return invoke<{ portfolio: Portfolio }>('/deposits', { auth, payload: { amount, txReference, paymentMemo } })
 }
 
 export async function withdraw(auth: AuthHeaders, amount: number) {

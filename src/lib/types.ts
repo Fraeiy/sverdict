@@ -26,6 +26,7 @@ export interface Market {
   yes_pool: number
   no_pool: number
   volume: number
+  seed_liquidity?: number
   trending_score: number
   resolution?: Outcome | null
   resolved_outcome?: Outcome | null

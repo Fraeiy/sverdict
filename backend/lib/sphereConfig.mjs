@@ -20,19 +20,20 @@ export function sphereDataDirs() {
   }
 }
 
-/** Required so Node worker can pull UCT received by the browser @sphere-predict wallet. */
+/** Optional IPFS backup/recovery — not the v2 payment rail (wallet-api mailbox is). */
 export function sphereTokenSync() {
+  if (process.env.TREASURY_IPFS_SYNC === 'false') return undefined
   return { ipfs: { enabled: true } }
 }
 
-/** On testnet2, mint UCT when spendable balance is 0 (set TREASURY_AUTO_MINT=false to disable). */
-export function treasuryAutoMintEnabled() {
-  if (process.env.TREASURY_AUTO_MINT === 'false') return false
-  const net = sphereNetwork()
-  return net === 'testnet' || net === 'testnet2'
+/** Canonical testnet2 wallet-api host per sphere-sdk docs. */
+export function sphereWalletApiBaseUrl() {
+  return process.env.SPHERE_WALLET_API_URL || 'https://wallet-api.unicity.network'
 }
 
-export function treasuryMintTopupUct() {
-  const n = Number(process.env.TREASURY_MINT_TOPUP_UCT || 100)
-  return BigInt(Math.max(1, Math.floor(n)))
+/** v2 wallet-api network id — must match gateway (testnet aliases testnet2). */
+export function sphereWalletApiNetwork() {
+  const raw = (process.env.SPHERE_WALLET_API_NETWORK || 'testnet2').trim()
+  return raw || 'testnet2'
 }
+

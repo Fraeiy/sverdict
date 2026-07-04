@@ -62,11 +62,11 @@ export async function fetchHistory(auth: AuthHeaders) {
   return request<{ history: HistoryEntry[] }>('/history', { headers: authHeaders(auth) })
 }
 
-export async function deposit(auth: AuthHeaders, amount: number, txReference?: string) {
+export async function deposit(auth: AuthHeaders, amount: number, txReference?: string, paymentMemo?: string) {
   return request<{ portfolio: Portfolio }>('/deposits', {
     method: 'POST',
     headers: authHeaders(auth),
-    body: JSON.stringify({ amount, txReference }),
+    body: JSON.stringify({ amount, txReference, paymentMemo }),
   })
 }
 
