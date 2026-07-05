@@ -1,76 +1,140 @@
 # Sphere Predict
 
-Sphere Predict is a lightweight prediction-market prototype built for the Sphere ecosystem. The goal is to make it easy for people to create markets, place bets, and share signed market packets that can be verified by other clients.
+Prediction markets on [Unicity Sphere](https://sphere.unicity.network) testnet. Users connect a Sphere wallet, deposit UCT into a portfolio margin account, trade YES/NO positions instantly, and withdraw back to their wallet.
 
-The current focus is the product experience on the frontend: fast market browsing, wallet-based actions, signed market activity, and a clean interface for testing the core prediction-market flow.
+Treasury: `@sphere-predict`
 
-## What We Are Building
+## How it works
 
-This project is aiming at a simple but useful loop:
+```
+Connect wallet → Deposit UCT (Sphere payment to treasury)
+  → Trade from portfolio balance (no per-trade popup)
+  → Market resolves → Winnings credited to portfolio
+  → Withdraw → Treasury agent sends UCT on-chain
+```
 
-1. Browse open markets and see the current pool state.
-2. Connect a Sphere wallet to sign actions.
-3. Create, share, bet on, and resolve markets with verifiable payloads.
-4. Keep the experience lightweight enough to run as a public demo or a private test app.
+Trades settle in a **portfolio ledger** (Supabase Postgres). Deposits and withdrawals move real UCT on Sphere testnet. New markets are seeded with 100 UCT from the treasury ledger (50/50 YES/NO pools).
 
-## Current Status
+## Architecture
 
-- Frontend is active and can run locally.
-- Wallet connection and signed market actions are part of the app flow.
-- The backend is not live right now, so the app should be treated as frontend-first for the moment.
+```
+┌─────────────┐     ┌──────────────────────────┐     ┌─────────────┐
+│   Vercel    │────▶│  Supabase                │────▶│   Sphere    │
+│  React app  │     │  Postgres + edge fn      │     │   wallet    │
+└─────────────┘     │  "platform"              │     └─────────────┘
+                    └───────────┬──────────────┘
+                                │
+                    ┌───────────▼──────────────┐
+                    │  GitHub Actions workers  │
+                    │  treasury + DM agents    │
+                    └──────────────────────────┘
+```
 
-## Running Locally
+| Layer | Role |
+|-------|------|
+| **Frontend** | React + Vite on Vercel — markets, portfolio, admin, settings |
+| **API** | Supabase edge function `platform` — auth, trades, deposits, withdrawals |
+| **Database** | Postgres — users, markets, positions, ledger, notifications |
+| **Wallet** | Sphere Connect — deposits (user signs), identity |
+| **Agents** | `treasury-worker` fulfills withdrawals; `dm-worker` sends Sphere DMs on win/withdrawal |
+
+## Features
+
+- Browse and filter open markets (AMM-style YES/NO pools)
+- Portfolio margin — deposit, trade, withdraw
+- Admin panel — create/close/resolve markets, fulfill withdrawals
+- Settings — default stake, confirm-before-trade, DM preferences
+- Payment memos — `SP:v1:deposit|withdraw|stake|settle|seed:...` on ledger entries
+- Autonomous treasury agent — processes withdrawal queue every 5 minutes
+- Sphere DMs — optional notifications on market wins and completed withdrawals
+
+## Quick start (local)
 
 ```bash
 npm install
+cp .env.example .env   # if present; otherwise create .env (see below)
 npm run dev
 ```
 
-## Build
+Open the Vite dev server (default `http://localhost:5173`), connect a Sphere wallet, and trade.
+
+### Environment (local)
+
+Create `.env` in the project root:
+
+```env
+VITE_WALLET_URL=https://sphere.unicity.network
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+VITE_TREASURY_ADDRESS=@sphere-predict
+```
+
+When `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set, the app uses Supabase (production path). Without them, it falls back to the local REST API.
+
+### Local REST API (optional)
+
+For offline backend development without Supabase:
 
 ```bash
+# .env — omit VITE_SUPABASE_* or use placeholders; add:
+VITE_MARKET_API_URL=http://127.0.0.1:8787
+
+npm run dev:full   # starts backend on :8787 + Vite frontend
+```
+
+The legacy Node server in `backend/server.mjs` is for local dev only — not used in production.
+
+## Production deploy
+
+See **[PRODUCTION.md](./PRODUCTION.md)** for the full setup:
+
+1. Supabase — push migrations, deploy edge function
+2. Vercel — set env vars, deploy frontend
+3. GitHub Actions — treasury + DM workers (secrets: `TREASURY_MNEMONIC`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+
+Before deploying to Vercel:
+
+```bash
+npm run prod:check
 npm run build
 ```
 
-## Environment
+## Scripts
 
-If you need to point the app at a different wallet host, set `VITE_WALLET_URL` in your local environment.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Vite dev server (Supabase or REST backend) |
+| `npm run dev:full` | Local REST API + Vite |
+| `npm run build` | Production build |
+| `npm run prod:check` | Validate env vars before Vercel deploy |
+| `npm run supabase:push` | Apply database migrations |
+| `npm run supabase:deploy` | Deploy `platform` edge function |
+| `npm run treasury:worker` | Process one withdrawal pass |
+| `npm run treasury:worker:status` | Show withdrawal queue counts |
+| `npm run treasury:worker:dry-run` | Preview sends without executing |
+| `npm run dm:worker` | Process outbound Sphere DM queue |
 
-If the frontend is deployed separately from the backend, set `VITE_MARKET_API_URL` to your Fly.io backend URL, for example `https://sphere-predict.fly.dev` or `https://sphere-predict.fly.dev/api`.
+## Project structure
 
-## Fly.io Backend
-
-The backend is ready to run on Fly.io as a full-stack service that also serves the built frontend. Deploy it from the repo root with:
-
-```bash
-fly launch
-fly deploy
+```
+src/                    React frontend (pages, hooks, components)
+supabase/
+  functions/platform/   Edge API (trades, deposits, admin, settings)
+  migrations/           Postgres schema (001–011)
+backend/
+  treasury-worker.mjs   Autonomous withdrawal agent
+  dm-worker.mjs         Sphere DM delivery agent
+  server.mjs            Local dev REST API only
+.github/workflows/      Treasury agent cron (every 5 min)
 ```
 
-**Important: Persistent storage for markets**
+## Tech stack
 
-Market creates/resolves are persisted to disk (`markets.json`). By default Fly containers are ephemeral and machines can be stopped (see `auto_stop_machines` in `fly.toml`).
+- React 19, TypeScript, Vite, Tailwind CSS 4
+- Supabase (Postgres, edge functions, realtime)
+- `@unicitylabs/sphere-sdk` — wallet connect, payments
+- Vercel — frontend hosting
 
-1. Create a volume (one time):
-   ```bash
-   fly volumes create sphere_predict_data --size 1 --region ams
-   ```
-   (Use your primary_region.)
+## Repo
 
-2. The `fly.toml` already declares the mount and sets `DATA_DIR=/data` so the server writes to the volume.
-
-3. Redeploy after volume creation:
-   ```bash
-   fly deploy
-   ```
-
-Without a volume, created markets will disappear on the next machine start/restart (this was the root cause of "new markets gone after refresh").
-
-After the Fly app is live, either point a separate frontend at it with `VITE_MARKET_API_URL`, or use the same Fly app as the public URL for the full app.
-
-## Tech Stack
-
-- React
-- Vite
-- Sphere wallet SDK
-- ESLint
+https://github.com/Fraeiy/sphere-predict
