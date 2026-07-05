@@ -121,7 +121,7 @@ User deposits send UCT to `@sphere-predict` from the browser wallet. The treasur
 |------|-----|
 | `VITE_MARKET_API_URL` | Local REST fallback only |
 | `npm run backend` / `backend/server.mjs` | Local dev only |
-| `legacy/` folder | Old Vercel API handler |
+| `backend/lib/marketState.mjs` | Old packet protocol (`dev:full` only) |
 | Fly.io | Removed; not part of current stack |
 
 ---

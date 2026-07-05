@@ -117,6 +117,10 @@ export async function adminResolveMarket(auth: AuthHeaders, marketId: string, re
   })
 }
 
+export async function adminWithdrawalQueue(_auth: AuthHeaders) {
+  return { counts: { submitted: 0, processing: 0, completed: 0, failed: 0 }, recent: [] }
+}
+
 export async function adminListPendingWithdrawals(auth: AuthHeaders) {
   return request<{ withdrawals: unknown[] }>('/admin/withdrawals/pending', { headers: authHeaders(auth) })
 }

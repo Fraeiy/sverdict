@@ -10,9 +10,9 @@ type Props = {
 }
 
 const NAV = [
-  { to: '/', label: 'Markets' },
-  { to: '/portfolio', label: 'Portfolio' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/', label: 'Markets', short: 'Mkt' },
+  { to: '/portfolio', label: 'Portfolio', short: 'Port' },
+  { to: '/settings', label: 'Settings', short: 'Set' },
 ]
 
 export function AppShell({ identity, balanceHuman, isAdmin, notificationUnread = 0, onDisconnect }: Props) {
@@ -91,11 +91,44 @@ export function AppShell({ identity, balanceHuman, isAdmin, notificationUnread =
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 pb-[4.5rem] sm:pb-0">
         <Outlet />
       </main>
 
-      <footer className="border-t border-[var(--color-border)] py-4">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur-xl sm:hidden">
+        <div className="mx-auto flex max-w-6xl items-stretch justify-around px-2 pb-[env(safe-area-inset-bottom)]">
+          {NAV.map(item => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={`relative flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2 py-3 font-data text-[9px] font-bold uppercase tracking-wider transition ${
+                navActive(item.to) ? 'text-[var(--color-gold)]' : 'text-[var(--color-muted)]'
+              }`}
+            >
+              {item.to === '/settings' && notificationUnread > 0 && (
+                <span className="absolute right-1/4 top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-gold)] px-0.5 text-[8px] font-bold text-[#111]">
+                  {notificationUnread > 9 ? '9+' : notificationUnread}
+                </span>
+              )}
+              <span className="text-[10px]">{item.short}</span>
+              <span>{item.label}</span>
+            </Link>
+          ))}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 px-2 py-3 font-data text-[9px] font-bold uppercase tracking-wider transition ${
+                navActive('/admin') ? 'text-[var(--color-gold)]' : 'text-[var(--color-muted)]'
+              }`}
+            >
+              <span className="text-[10px]">Adm</span>
+              <span>Admin</span>
+            </Link>
+          )}
+        </div>
+      </nav>
+
+      <footer className="hidden border-t border-[var(--color-border)] py-4 sm:block">
         <p className="text-center font-data text-[10px] tracking-wider text-[var(--color-muted)]">
           POWERED BY <span className="text-[var(--color-gold)]">UNICITY</span> · SPHERE TESTNET
         </p>

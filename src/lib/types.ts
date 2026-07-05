@@ -80,6 +80,7 @@ export interface Position {
 }
 
 export type HistoryType = 'deposit' | 'withdrawal' | 'trade' | 'settlement'
+export type WithdrawalStatus = 'submitted' | 'processing' | 'completed' | 'failed'
 
 export interface HistoryEntry {
   id: string
@@ -88,6 +89,8 @@ export interface HistoryEntry {
   direction: 'in' | 'out'
   label: string
   detail?: string | null
+  status?: WithdrawalStatus | string
+  tx_reference?: string | null
   market_id?: string | null
   created_at: string
 }

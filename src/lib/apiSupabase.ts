@@ -145,6 +145,22 @@ export async function adminResolveMarket(auth: AuthHeaders, marketId: string, re
   return invoke(`/admin/markets/resolve/${marketId}`, { auth, payload: { resolution } })
 }
 
+export async function adminWithdrawalQueue(auth: AuthHeaders) {
+  return invoke<{
+    counts: Record<string, number>
+    recent: Array<{
+      id: string
+      amount: number
+      status: string
+      created_at: string
+      completed_at?: string | null
+      tx_reference?: string | null
+      failure_reason?: string | null
+      users?: { nametag?: string | null; wallet_address?: string }
+    }>
+  }>('/admin/withdrawals/queue', { auth })
+}
+
 export async function adminListPendingWithdrawals(auth: AuthHeaders) {
   return invoke<{ withdrawals: unknown[] }>('/admin/withdrawals/pending', { auth })
 }

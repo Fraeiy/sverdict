@@ -518,6 +518,8 @@ Deno.serve(async (req) => {
           type: 'withdrawal',
           amount: Number(w.amount),
           direction: 'out',
+          status: w.status,
+          tx_reference: w.tx_reference || null,
           label: w.status === 'completed' ? 'Withdrawal sent' : w.status === 'processing' ? 'Withdrawal processing' : w.status === 'failed' ? 'Withdrawal failed' : 'Withdrawal queued',
           detail: w.payment_memo || (w.status === 'submitted' ? 'Queued for treasury agent' : w.status === 'processing' ? 'Treasury agent sending on-chain' : w.status === 'failed' ? (w.failure_reason || 'Failed — balance restored') : w.tx_reference || 'Completed'),
           created_at: w.created_at,
@@ -745,6 +747,20 @@ Deno.serve(async (req) => {
       })
 
       return json({ market: { ...market, status: 'resolved', resolution: res }, settlement: { total_payout: totalPayout } })
+    }
+
+    if (route === '/admin/withdrawals/queue') {
+      const statuses = ['submitted', 'processing', 'completed', 'failed'] as const
+      const counts: Record<string, number> = {}
+      await Promise.all(statuses.map(async status => {
+        const { count } = await db.from('withdrawals').select('*', { count: 'exact', head: true }).eq('status', status)
+        counts[status] = count ?? 0
+      }))
+      const { data: recent } = await db.from('withdrawals')
+        .select('id, amount, status, created_at, completed_at, tx_reference, failure_reason, users(nametag, wallet_address)')
+        .order('created_at', { ascending: false })
+        .limit(25)
+      return json({ counts, recent: recent || [] })
     }
 
     if (route === '/admin/withdrawals/pending') {

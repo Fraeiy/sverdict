@@ -125,6 +125,7 @@ backend/
   treasury-worker.mjs   Autonomous withdrawal agent
   dm-worker.mjs         Sphere DM delivery agent
   server.mjs            Local dev REST API only
+  lib/marketState.mjs   Old packet protocol (dev:full only)
 .github/workflows/      Treasury agent cron (every 5 min)
 ```
 

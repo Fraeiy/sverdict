@@ -20,6 +20,7 @@ export const placeTrade = impl.placeTrade
 export const adminCreateMarket = impl.adminCreateMarket
 export const adminCloseMarket = impl.adminCloseMarket
 export const adminResolveMarket = impl.adminResolveMarket
+export const adminWithdrawalQueue = impl.adminWithdrawalQueue
 export const adminListPendingWithdrawals = impl.adminListPendingWithdrawals
 export const adminFulfillWithdrawal = impl.adminFulfillWithdrawal
 export const subscribeToMarkets = impl.subscribeToMarkets

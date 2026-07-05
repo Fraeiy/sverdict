@@ -61,6 +61,10 @@ export function usePlatform(identity: WalletIdentity | null) {
       if (!auth) throw new Error('Not connected')
       return api.adminCloseMarket(auth, marketId)
     },
+    async withdrawalQueue() {
+      if (!auth) throw new Error('Not connected')
+      return api.adminWithdrawalQueue(auth)
+    },
     async listPendingWithdrawals() {
       if (!auth) throw new Error('Not connected')
       return api.adminListPendingWithdrawals(auth)

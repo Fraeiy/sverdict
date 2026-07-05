@@ -4,6 +4,8 @@ import { authFromIdentity } from '../lib/auth'
 import { getBackendMode } from '../lib/config'
 import type { AppNotification, WalletIdentity } from '../lib/types'
 
+const POLL_MS = 30_000
+
 export function useNotifications(identity: WalletIdentity | null) {
   const auth = useMemo(() => authFromIdentity(identity), [identity])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
@@ -34,6 +36,24 @@ export function useNotifications(identity: WalletIdentity | null) {
     setLoading(true)
     refresh().catch(() => setLoading(false))
   }, [refresh])
+
+  useEffect(() => {
+    if (!auth || getBackendMode() !== 'supabase') return
+
+    const interval = setInterval(() => {
+      refresh().catch(() => {})
+    }, POLL_MS)
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') refresh().catch(() => {})
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [auth, refresh])
 
   const markAllRead = useCallback(async () => {
     if (!auth) return

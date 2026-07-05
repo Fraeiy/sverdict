@@ -1,4 +1,4 @@
-import { verifyPayloadSignature } from './marketProtocol.js'
+import { verifyPayloadSignature } from './marketProtocol.mjs'
 
 export const SEED_MARKETS = [
   { id: 'm1', category: 'CRYPTO', status: 'open', question: 'Will ETH surpass BTC in market cap by Q4 2026?', deadline: Date.now() + 90 * 864e5, yesPool: 3200, noPool: 800, bets: [] },
@@ -21,10 +21,7 @@ export function normalizeBet(bet) {
   const signature = bet.signature || null
   const publicKey = bet.publicKey || null
   const verified = Boolean(signedMessage && signature && publicKey && verifyPayloadSignature(signedMessage, signature, publicKey))
-  return {
-    ...bet,
-    verified,
-  }
+  return { ...bet, verified }
 }
 
 export function normalizeMarket(market) {
@@ -39,11 +36,7 @@ export function normalizeMarket(market) {
     ...market,
     status,
     bets,
-    proof: {
-      verified,
-      signed: Boolean(signature),
-      publicKey,
-    },
+    proof: { verified, signed: Boolean(signature), publicKey },
     shareCode: market.shareCode || null,
   }
 }
