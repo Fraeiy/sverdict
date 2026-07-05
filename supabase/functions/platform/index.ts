@@ -6,7 +6,7 @@ import {
   buildSettleMemo,
   buildStakeMemo,
   buildWithdrawMemo,
-} from '../paymentMemos.ts'
+} from './paymentMemos.ts'
 
 const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
 
