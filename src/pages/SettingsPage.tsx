@@ -13,7 +13,7 @@ type Props = {
   onToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }
 
-function Toggle({
+function SettingToggle({
   checked,
   disabled,
   onChange,
@@ -23,24 +23,30 @@ function Toggle({
   onChange: (next: boolean) => void
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full border transition ${
-        checked
-          ? 'border-[rgba(245,158,11,0.5)] bg-[rgba(245,158,11,0.35)]'
-          : 'border-[var(--color-border-2)] bg-[var(--color-surface-4)]'
-      } disabled:opacity-40`}
+    <div
+      role="group"
+      className="inline-flex rounded-md border border-[var(--color-border)] bg-[var(--color-surface-4)] p-0.5 font-data text-[10px] font-bold uppercase tracking-wider"
     >
-      <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${
-          checked ? 'left-[22px]' : 'left-0.5'
-        }`}
-      />
-    </button>
+      {(['off', 'on'] as const).map(option => {
+        const isOn = option === 'on'
+        const active = checked === isOn
+        return (
+          <button
+            key={option}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(isOn)}
+            className={`min-w-[3.25rem] rounded px-3 py-1.5 transition ${
+              active
+                ? 'bg-[var(--color-gold)] text-[#111]'
+                : 'text-[var(--color-muted)] hover:text-[var(--color-text-2)]'
+            } disabled:opacity-40`}
+          >
+            {option}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -211,7 +217,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
             label="Win notifications"
             description="Receive a Sphere DM when you win on a resolved market."
           >
-            <Toggle
+            <SettingToggle
               checked={preferences.dmOnWin}
               disabled={loading || saving}
               onChange={v => patchPrefs({ dmOnWin: v })}
@@ -221,7 +227,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
             label="Withdrawal notifications"
             description="Receive a Sphere DM when a withdrawal is sent to your wallet."
           >
-            <Toggle
+            <SettingToggle
               checked={preferences.dmOnWithdrawal}
               disabled={loading || saving}
               onChange={v => patchPrefs({ dmOnWithdrawal: v })}
@@ -277,7 +283,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
             label="Confirm before trade"
             description="Show a confirmation dialog before executing a position."
           >
-            <Toggle
+            <SettingToggle
               checked={preferences.confirmBeforeTrade}
               disabled={loading || saving}
               onChange={v => patchPrefs({ confirmBeforeTrade: v })}
