@@ -20,7 +20,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { UCT_COIN_ID, normalizeRecipient, rawToHuman, toRawString } from './lib/constants.mjs'
+import { humanToRawBigInt, normalizeRecipient, rawToHuman } from './lib/constants.mjs'
 import { buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
@@ -74,15 +74,15 @@ async function initSphere() {
   return sphere
 }
 
-/** UCT decimals from TokenRegistry / live asset metadata (set during prepareTreasurySphere). */
-let treasuryUctDecimals = 8
+/** UCT decimals from TokenRegistry (authoritative for send amounts). */
+let treasuryUctDecimals = getUctDecimals()
 
 async function getUctBalance(sphere) {
   const assets = await sphere.payments.getAssets()
   const uct = (assets || []).find(a =>
     a.symbol === 'UCT' || a.coinId?.toLowerCase() === UCT_COIN_ID.toLowerCase(),
   )
-  const decimals = Number(uct?.decimals ?? 18)
+  const decimals = treasuryUctDecimals
   const rawStr = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
   const raw = BigInt(String(rawStr || 0))
   return { raw, decimals, human: rawToHuman(raw, decimals), asset: uct }
@@ -125,12 +125,12 @@ async function prepareTreasurySphere(sphere) {
   }
 
   treasuryUctDecimals = getUctDecimals()
+  console.log(`[treasury-agent] UCT decimals (TokenRegistry): ${treasuryUctDecimals}`)
 
   let bal = await getUctBalance(sphere).catch(e => {
     console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
     return { raw: 0n, decimals: treasuryUctDecimals, human: 0, asset: null }
   })
-  if (bal.decimals) treasuryUctDecimals = bal.decimals
   logUctBalance(bal, 'wallet-api inventory')
 
   return sphere
@@ -219,7 +219,7 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
   let processed = 0
 
   for (const w of pending) {
-    const amount = Number(w.amount)
+    const amount = Number(Number(w.amount).toFixed(4))
     const user = w.users
     const recipientRaw = user?.nametag || user?.wallet_address
 
@@ -254,8 +254,14 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
 
     if (lockErr || !locked) continue
 
+    let sendCompleted = false
     try {
-      const sendRaw = BigInt(toRawString(amount, treasuryUctDecimals))
+      const sendRaw = humanToRawBigInt(amount, treasuryUctDecimals)
+      if (sendRaw <= 0n) {
+        await failWithdrawal(db, w, 'Invalid raw amount after conversion', { recredit: true })
+        continue
+      }
+
       let bal = await refreshSpendableInventory(sphere)
       if (bal.raw < sendRaw) {
         console.warn(
@@ -264,42 +270,53 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         bal = await refreshSpendableInventory(sphere)
       }
 
-      console.log(`[treasury-agent] sending ${amount} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`)
+      console.log(
+        `[treasury-agent] sending ${amount.toFixed(4)} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`,
+      )
       const result = await sphere.payments.send({
         recipient,
         amount: String(sendRaw),
         coinId: 'UCT',
         memo,
       })
+      sendCompleted = true
       if (result?.deliveryPending) {
         console.log(`[treasury-agent] ${w.id} certified on-chain; mailbox delivery deferred (normal v2 behavior)`)
       }
       const ref = txReference(result)
-      await db.from('withdrawals').update({
+
+      // Persist completion immediately — do not let notify/DM failures requeue a successful on-chain send.
+      const { error: completeErr } = await db.from('withdrawals').update({
         status: 'completed',
         completed_at: new Date().toISOString(),
         tx_reference: String(ref),
         payment_memo: memo,
         failure_reason: null,
-      }).eq('id', w.id)
+      }).eq('id', w.id).eq('status', 'processing')
+      if (completeErr) throw completeErr
 
-      await notify(
-        db,
-        w.user_id,
-        'Withdrawal sent',
-        `${amount.toFixed(2)} UCT sent from treasury to ${recipient}.`,
-        { withdrawalId: w.id, amount, txReference: ref, agent: 'treasury-worker' },
-      )
-      const dmPrefs = w.users?.preferences
-      const dmOn = dmPrefs?.dmOnWithdrawal !== false
-      if (dmOn) {
-        await queueWithdrawalSentDm(db, w.users, {
-          amount,
-          txReference: ref,
-          withdrawalId: w.id,
-          paymentMemo: memo,
-        }).catch(e => console.warn('[treasury-agent] DM queue failed:', e instanceof Error ? e.message : e))
+      try {
+        await notify(
+          db,
+          w.user_id,
+          'Withdrawal sent',
+          `${amount.toFixed(2)} UCT sent from treasury to ${recipient}.`,
+          { withdrawalId: w.id, amount, txReference: ref, agent: 'treasury-worker' },
+        )
+        const dmPrefs = w.users?.preferences
+        const dmOn = dmPrefs?.dmOnWithdrawal !== false
+        if (dmOn) {
+          await queueWithdrawalSentDm(db, w.users, {
+            amount,
+            txReference: ref,
+            withdrawalId: w.id,
+            paymentMemo: memo,
+          })
+        }
+      } catch (sideErr) {
+        console.warn('[treasury-agent] post-send notify/DM failed (withdrawal already completed):', sideErr instanceof Error ? sideErr.message : sideErr)
       }
+
       console.log(`[treasury-agent] completed ${w.id} tx=${ref}`)
       processed += 1
     } catch (e) {
@@ -307,8 +324,8 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
       console.error(`[treasury-agent] failed ${w.id}:`, reason)
       const inventoryMismatch = isSpendableInventoryError(reason)
       await failWithdrawal(db, w, reason, {
-        recredit: !inventoryMismatch,
-        requeue: inventoryMismatch,
+        recredit: !inventoryMismatch && !sendCompleted,
+        requeue: inventoryMismatch && !sendCompleted,
       })
     }
   }
