@@ -3,17 +3,20 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/layout/AppShell'
 import { ConnectScreen } from './components/layout/ConnectScreen'
 import { Toast } from './components/ui/Toast'
+import { useNotifications } from './hooks/useNotifications'
 import { usePlatform } from './hooks/usePlatform'
 import { useSphereConnect } from './hooks/useSphereConnect'
 import { AdminPage } from './pages/AdminPage'
 import { HomePage } from './pages/HomePage'
 import { MarketDetailPage } from './pages/MarketDetailPage'
 import { PortfolioPage } from './pages/PortfolioPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { isMisconfiguredProduction } from './lib/config'
 
 export default function App() {
   const wallet = useSphereConnect()
   const platform = usePlatform(wallet.identity)
+  const { unread: notificationUnread } = useNotifications(wallet.identity)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null)
 
   const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -60,6 +63,7 @@ export default function App() {
               identity={wallet.identity}
               balanceHuman={wallet.balanceHuman}
               isAdmin={platform.isAdmin}
+              notificationUnread={notificationUnread}
               onDisconnect={wallet.disconnect}
             />
           }
@@ -85,6 +89,16 @@ export default function App() {
               platform.isAdmin
                 ? <AdminPage identity={wallet.identity} onToast={showToast} />
                 : <Navigate to="/" replace />
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <SettingsPage
+                identity={wallet.identity}
+                onDisconnect={wallet.disconnect}
+                onToast={showToast}
+              />
             }
           />
         </Route>

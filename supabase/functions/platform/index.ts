@@ -10,6 +10,29 @@ import {
 
 const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
 
+const DEFAULT_PREFERENCES = {
+  defaultStake: 25,
+  confirmBeforeTrade: true,
+  dmOnWin: true,
+  dmOnWithdrawal: true,
+}
+
+function normalizePreferences(raw: unknown) {
+  const p = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const stake = Number(p.defaultStake)
+  return {
+    defaultStake: stake > 0 && stake <= 10_000 ? stake : DEFAULT_PREFERENCES.defaultStake,
+    confirmBeforeTrade: p.confirmBeforeTrade !== false,
+    dmOnWin: p.dmOnWin !== false,
+    dmOnWithdrawal: p.dmOnWithdrawal !== false,
+  }
+}
+
+function userWantsDm(prefs: unknown, key: 'dmOnWin' | 'dmOnWithdrawal') {
+  const p = normalizePreferences(prefs)
+  return p[key] !== false
+}
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-wallet-address, x-wallet-nametag, x-wallet-direct, x-wallet-pubkey',
@@ -424,6 +447,53 @@ Deno.serve(async (req) => {
     if (route === '/auth') return json({ user, portfolio: await getPortfolio(db, user.id) })
     if (route === '/portfolio') return json(await getPortfolio(db, user.id))
 
+    if (route === '/settings') {
+      const hasPrefsPatch = payload.preferences != null && typeof payload.preferences === 'object'
+      if (!hasPrefsPatch) {
+        const prefs = normalizePreferences(user.preferences)
+        return json({
+          preferences: prefs,
+          account: {
+            nametag: user.nametag,
+            wallet_address: user.wallet_address,
+            public_key: user.public_key,
+            is_admin: user.is_admin,
+          },
+        })
+      }
+      const current = normalizePreferences(user.preferences)
+      const patch = payload.preferences as Record<string, unknown>
+      const merged = normalizePreferences({ ...current, ...patch })
+      const { data: updated, error } = await db.from('users')
+        .update({ preferences: merged })
+        .eq('id', user.id)
+        .select('preferences')
+        .single()
+      if (error) throw error
+      return json({ preferences: normalizePreferences(updated?.preferences) })
+    }
+
+    if (route === '/notifications') {
+      const { data, error } = await db.from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      const unread = (data || []).filter(n => !n.read).length
+      return json({ notifications: data || [], unread })
+    }
+
+    if (route === '/notifications/read' && req.method === 'POST') {
+      const ids = Array.isArray(payload.ids) ? payload.ids as string[] : []
+      if (payload.all === true) {
+        await db.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false)
+      } else if (ids.length) {
+        await db.from('notifications').update({ read: true }).eq('user_id', user.id).in('id', ids)
+      }
+      return json({ ok: true })
+    }
+
     if (route === '/history') {
       const [{ data: deposits }, { data: withdrawals }, { data: trades }, { data: settlements }, { data: markets }] = await Promise.all([
         db.from('deposits').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(100),
@@ -618,8 +688,8 @@ Deno.serve(async (req) => {
       const { data: openPositions } = await db.from('positions').select('*').eq('market_id', marketId).eq('status', 'open')
       const userIds = [...new Set((openPositions || []).map(p => p.user_id))]
       const { data: dmUsers } = userIds.length
-        ? await db.from('users').select('id, nametag, wallet_address').in('id', userIds)
-        : { data: [] as { id: string; nametag?: string | null; wallet_address?: string | null }[] }
+        ? await db.from('users').select('id, nametag, wallet_address, preferences').in('id', userIds)
+        : { data: [] as { id: string; nametag?: string | null; wallet_address?: string | null; preferences?: unknown }[] }
       const userMap = new Map((dmUsers || []).map(u => [u.id, u]))
 
       let totalPayout = 0
@@ -655,13 +725,15 @@ Deno.serve(async (req) => {
 
         if (won && payout > 0) {
           const dmUser = userMap.get(pos.user_id)
-          await queueOutboundDm(db, {
-            userId: pos.user_id,
-            recipient: dmRecipientFromUser(dmUser),
-            content: formatMarketWinDm(payout, market.question),
-            kind: 'market_win',
-            metadata: { marketId, positionId: pos.id, payout },
-          }).catch(() => {})
+          if (userWantsDm(dmUser?.preferences, 'dmOnWin')) {
+            await queueOutboundDm(db, {
+              userId: pos.user_id,
+              recipient: dmRecipientFromUser(dmUser),
+              content: formatMarketWinDm(payout, market.question),
+              kind: 'market_win',
+              metadata: { marketId, positionId: pos.id, payout },
+            }).catch(() => {})
+          }
         }
       }
 
@@ -706,13 +778,15 @@ Deno.serve(async (req) => {
         `${Number(w.amount).toFixed(2)} UCT sent from @sphere-predict to ${recipient}.`,
         { withdrawalId, amount: w.amount, txReference: txRef },
       ).catch(() => {})
-      await queueOutboundDm(db, {
-        userId: w.user_id,
-        recipient: dmRecipientFromUser(w.users),
-        content: formatWithdrawalSentDm(Number(w.amount), txRef),
-        kind: 'withdrawal_sent',
-        metadata: { withdrawalId, amount: w.amount, txReference: txRef },
-      }).catch(() => {})
+      if (userWantsDm(w.users?.preferences, 'dmOnWithdrawal')) {
+        await queueOutboundDm(db, {
+          userId: w.user_id,
+          recipient: dmRecipientFromUser(w.users),
+          content: formatWithdrawalSentDm(Number(w.amount), txRef),
+          kind: 'withdrawal_sent',
+          metadata: { withdrawalId, amount: w.amount, txReference: txRef },
+        }).catch(() => {})
+      }
       return json({ ok: true })
     }
 

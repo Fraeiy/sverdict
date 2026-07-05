@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { HistoryEntry, Market, Portfolio, User } from './types'
+import type { AppNotification, HistoryEntry, Market, Portfolio, User, UserPreferences } from './types'
 import type { AuthHeaders } from './apiRest'
 
 function walletHeaders(auth?: AuthHeaders): Record<string, string> {
@@ -151,6 +151,25 @@ export async function adminListPendingWithdrawals(auth: AuthHeaders) {
 
 export async function adminFulfillWithdrawal(auth: AuthHeaders, withdrawalId: string, txReference?: string) {
   return invoke(`/admin/withdrawals/fulfill/${withdrawalId}`, { auth, payload: { txReference } })
+}
+
+export async function fetchSettings(auth: AuthHeaders) {
+  return invoke<{
+    preferences: UserPreferences
+    account: { nametag: string | null; wallet_address: string; public_key: string | null; is_admin: boolean }
+  }>('/settings', { auth, payload: { _method: 'GET' } })
+}
+
+export async function updateSettings(auth: AuthHeaders, preferences: Partial<UserPreferences>) {
+  return invoke<{ preferences: UserPreferences }>('/settings', { auth, payload: { preferences } })
+}
+
+export async function fetchNotifications(auth: AuthHeaders) {
+  return invoke<{ notifications: AppNotification[]; unread: number }>('/notifications', { auth, payload: { _method: 'GET' } })
+}
+
+export async function markNotificationsRead(auth: AuthHeaders, opts: { all?: boolean; ids?: string[] }) {
+  return invoke<{ ok: boolean }>('/notifications/read', { auth, payload: opts })
 }
 
 export function subscribeToMarkets(onUpdate: () => void) {

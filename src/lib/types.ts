@@ -4,12 +4,31 @@ export type Side = Outcome
 export type PositionStatus = 'open' | 'settled'
 export type NotificationType = 'stake' | 'claim' | 'market' | 'trade' | 'deposit' | 'withdrawal'
 
+export interface UserPreferences {
+  defaultStake: number
+  confirmBeforeTrade: boolean
+  dmOnWin: boolean
+  dmOnWithdrawal: boolean
+}
+
+export interface AppNotification {
+  id: string
+  user_id: string
+  type: NotificationType | string
+  title: string
+  body: string
+  read: boolean
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
 export interface User {
   id: string
   wallet_address: string
   nametag: string | null
   public_key: string | null
   is_admin: boolean
+  preferences?: UserPreferences | Record<string, unknown>
   created_at: string
 }
 

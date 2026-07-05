@@ -201,7 +201,7 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
   if (!dryRun) await resetStaleProcessing(db)
 
   const { data: pending, error } = await db.from('withdrawals')
-    .select('*, users(nametag, wallet_address)')
+    .select('*, users(nametag, wallet_address, preferences)')
     .eq('status', 'submitted')
     .order('created_at', { ascending: true })
     .limit(MAX_PER_RUN)
@@ -290,12 +290,16 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         `${amount.toFixed(2)} UCT sent from treasury to ${recipient}.`,
         { withdrawalId: w.id, amount, txReference: ref, agent: 'treasury-worker' },
       )
-      await queueWithdrawalSentDm(db, w.users, {
-        amount,
-        txReference: ref,
-        withdrawalId: w.id,
-        paymentMemo: memo,
-      }).catch(e => console.warn('[treasury-agent] DM queue failed:', e instanceof Error ? e.message : e))
+      const dmPrefs = w.users?.preferences
+      const dmOn = dmPrefs?.dmOnWithdrawal !== false
+      if (dmOn) {
+        await queueWithdrawalSentDm(db, w.users, {
+          amount,
+          txReference: ref,
+          withdrawalId: w.id,
+          paymentMemo: memo,
+        }).catch(e => console.warn('[treasury-agent] DM queue failed:', e instanceof Error ? e.message : e))
+      }
       console.log(`[treasury-agent] completed ${w.id} tx=${ref}`)
       processed += 1
     } catch (e) {

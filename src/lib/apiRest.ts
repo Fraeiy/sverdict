@@ -1,4 +1,5 @@
-import type { HistoryEntry, Market, Portfolio, User } from './types'
+import type { AppNotification, HistoryEntry, Market, Portfolio, User, UserPreferences } from './types'
+import { loadCachedPreferences, normalizePreferences, cachePreferences } from './userSettings'
 
 const API_BASE = import.meta.env.VITE_MARKET_API_URL
   ? String(import.meta.env.VITE_MARKET_API_URL).replace(/\/$/, '').replace(/\/api$/, '') + '/api'
@@ -126,6 +127,33 @@ export async function adminFulfillWithdrawal(auth: AuthHeaders, withdrawalId: st
     headers: authHeaders(auth),
     body: JSON.stringify({ txReference }),
   })
+}
+
+export async function fetchSettings(auth: AuthHeaders) {
+  const preferences = loadCachedPreferences()
+  return {
+    preferences,
+    account: {
+      nametag: auth.nametag ?? null,
+      wallet_address: auth.walletAddress,
+      public_key: auth.publicKey ?? null,
+      is_admin: false,
+    },
+  }
+}
+
+export async function updateSettings(_auth: AuthHeaders, preferences: Partial<UserPreferences>) {
+  const merged = normalizePreferences({ ...loadCachedPreferences(), ...preferences })
+  cachePreferences(merged)
+  return { preferences: merged }
+}
+
+export async function fetchNotifications(_auth: AuthHeaders) {
+  return { notifications: [] as AppNotification[], unread: 0 }
+}
+
+export async function markNotificationsRead(_auth: AuthHeaders, _opts: { all?: boolean; ids?: string[] }) {
+  return { ok: true }
 }
 
 export function subscribeToMarkets(_onUpdate: () => void) {

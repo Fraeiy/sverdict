@@ -23,3 +23,7 @@ export const adminResolveMarket = impl.adminResolveMarket
 export const adminListPendingWithdrawals = impl.adminListPendingWithdrawals
 export const adminFulfillWithdrawal = impl.adminFulfillWithdrawal
 export const subscribeToMarkets = impl.subscribeToMarkets
+export const fetchSettings = impl.fetchSettings
+export const updateSettings = impl.updateSettings
+export const fetchNotifications = impl.fetchNotifications
+export const markNotificationsRead = impl.markNotificationsRead

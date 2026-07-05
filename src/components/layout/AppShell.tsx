@@ -5,15 +5,17 @@ type Props = {
   identity: { nametag?: string; directAddress?: string } | null
   balanceHuman: string
   isAdmin?: boolean
+  notificationUnread?: number
   onDisconnect: () => void
 }
 
 const NAV = [
   { to: '/', label: 'Markets' },
   { to: '/portfolio', label: 'Portfolio' },
+  { to: '/settings', label: 'Settings' },
 ]
 
-export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Props) {
+export function AppShell({ identity, balanceHuman, isAdmin, notificationUnread = 0, onDisconnect }: Props) {
   const location = useLocation()
 
   function navActive(to: string) {
@@ -45,7 +47,14 @@ export function AppShell({ identity, balanceHuman, isAdmin, onDisconnect }: Prop
                     : 'border-transparent text-[var(--color-text-2)] hover:text-[var(--color-text)]'
                 }`}
               >
-                {item.label}
+                <span className="relative inline-flex items-center gap-1.5">
+                  {item.label}
+                  {item.to === '/settings' && notificationUnread > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-gold)] px-1 font-data text-[9px] font-bold text-[#111]">
+                      {notificationUnread > 9 ? '9+' : notificationUnread}
+                    </span>
+                  )}
+                </span>
               </Link>
             ))}
             {isAdmin && (

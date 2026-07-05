@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { TradeConfirmModal } from '../components/ui/TradeConfirmModal'
 import { useMarkets } from '../hooks/useMarkets'
 import { usePositions } from '../hooks/usePositions'
+import { useUserSettings } from '../hooks/useUserSettings'
 import type { Market, Outcome } from '../lib/types'
+import { loadCachedPreferences } from '../lib/userSettings'
 import { fmtUct, noProbability, timeRemaining, yesProbability } from '../lib/format'
 
 type Props = {
@@ -16,11 +18,13 @@ export function MarketDetailPage({ identity, onToast }: Props) {
   const navigate = useNavigate()
   const { getMarket } = useMarkets({ autoLoad: false })
   const { placeTrade, availableBalance, refresh } = usePositions(identity)
+  const { preferences } = useUserSettings(identity)
 
   const [market, setMarket] = useState<Market | null>(null)
-  const [amount, setAmount] = useState('25')
+  const [amount, setAmount] = useState(() => String(loadCachedPreferences().defaultStake))
   const [loading, setLoading] = useState<Outcome | null>(null)
   const [confirmOutcome, setConfirmOutcome] = useState<Outcome | null>(null)
+  const stakeInitialized = useRef(false)
 
   useEffect(() => {
     if (!id) return
@@ -30,6 +34,13 @@ export function MarketDetailPage({ identity, onToast }: Props) {
   useEffect(() => {
     refresh().catch(() => {})
   }, [refresh])
+
+  useEffect(() => {
+    if (!stakeInitialized.current) {
+      setAmount(String(preferences.defaultStake))
+      stakeInitialized.current = true
+    }
+  }, [preferences.defaultStake])
 
   if (!market) {
     return (
@@ -59,12 +70,15 @@ export function MarketDetailPage({ identity, onToast }: Props) {
       onToast('This market is not open for trading', 'error')
       return
     }
-    setConfirmOutcome(outcome)
+    if (preferences.confirmBeforeTrade) {
+      setConfirmOutcome(outcome)
+      return
+    }
+    executeBuy(outcome)
   }
 
-  async function confirmBuy() {
-    if (!confirmOutcome || !market) return
-    const outcome = confirmOutcome
+  async function executeBuy(outcome: Outcome) {
+    if (!market) return
     setLoading(outcome)
     try {
       await placeTrade({ marketId: market.id, outcome, amount: stakeAmount })
@@ -76,6 +90,11 @@ export function MarketDetailPage({ identity, onToast }: Props) {
     } finally {
       setLoading(null)
     }
+  }
+
+  async function confirmBuy() {
+    if (!confirmOutcome) return
+    await executeBuy(confirmOutcome)
   }
 
   return (
@@ -150,7 +169,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
             className="input-pro mb-4 w-full rounded-lg px-4 py-4 text-xl font-bold"
           />
           <div className="mb-6 flex flex-wrap gap-2">
-            {[10, 25, 50, 100].map(n => (
+            {Array.from(new Set([10, 25, 50, 100, preferences.defaultStake])).sort((a, b) => a - b).map(n => (
               <button
                 key={n}
                 onClick={() => setAmount(String(n))}
