@@ -10,7 +10,7 @@ import {
 } from '@unicitylabs/sphere-sdk/connect'
 import { PostMessageTransport, ExtensionTransport } from '@unicitylabs/sphere-sdk/connect/browser'
 import { isInIframe, hasExtension } from './lib/detection'
-import { toHuman, toRawString } from './lib/amount'
+import { toHuman, toRawString, UCT_DECIMALS } from './lib/amount'
 import { isUctAsset, resolveCoinId } from './lib/sphereCoins'
 
 const WALLET_URL = import.meta.env.VITE_WALLET_URL || 'https://sphere.unicity.network'
@@ -81,6 +81,7 @@ export function useWalletConnect() {
   const transportRef = useRef(null)
   const popupRef = useRef(null)
   const popupMode = useRef(false)
+  const uctDecimalsRef = useRef(UCT_DECIMALS)
 
   const dappMeta = useMemo(() => ({
     name: 'Sphere Predict',
@@ -113,8 +114,10 @@ export function useWalletConnect() {
       const assets = await client.query(RPC_METHODS.GET_ASSETS)
       const list = Array.isArray(assets) ? assets : assets?.assets ?? []
       const uct = list.find(isUctAsset)
+      const decimals = Number(uct?.decimals ?? UCT_DECIMALS)
+      uctDecimalsRef.current = Number.isFinite(decimals) ? decimals : UCT_DECIMALS
       const raw = uct?.totalAmount ?? uct?.balance ?? 0
-      setBalanceHuman(toHuman(raw))
+      setBalanceHuman(toHuman(raw, uctDecimalsRef.current))
     } catch (err) {
       console.warn('Balance fetch failed:', err)
       setBalanceHuman('?')
@@ -297,11 +300,15 @@ export function useWalletConnect() {
   }, [intent])
 
   /** Send UCT — opens Sphere wallet for user to sign & confirm.
-   *  amountHuman is human UCT (e.g. 50). Connect v2 expects raw base units (UCT = 8 decimals).
+   *  amountHuman is human UCT (e.g. 50). Connect expects raw smallest units per asset.decimals.
    */
   const sendPayment = useCallback(async ({ recipient, amountHuman, coinId = 'UCT', memo }) => {
     const to = normalizeRecipient(recipient)
-    const params = { to, amount: toRawString(amountHuman), coinId: resolveCoinId(coinId) }
+    const params = {
+      to,
+      amount: toRawString(amountHuman, uctDecimalsRef.current),
+      coinId: resolveCoinId(coinId),
+    }
     if (memo) params.memo = memo
     const result = await intent(INTENT_ACTIONS.SEND, params)
     await refreshBalance()
