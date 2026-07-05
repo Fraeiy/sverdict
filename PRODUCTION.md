@@ -1,108 +1,137 @@
-# Production Setup (Simple)
-
-One architecture. No confusion.
+# Production Setup
 
 ```
 Vercel  →  frontend (static React app)
-Supabase →  database + API (edge function "platform")
-Sphere   →  wallet auth, deposits, withdrawals
+Supabase →  Postgres + edge function "platform"
+Sphere   →  wallet connect, deposits, withdrawals
+GitHub   →  treasury + DM workers (cron)
 ```
 
-Local dev (`npm run dev:full`) uses a local Node API. **Production does not** — it uses Supabase only.
+Local dev (`npm run dev:full`) uses the Node REST API in `backend/server.mjs`. **Production uses Supabase only.**
 
 ---
 
-## Step 1 — Supabase (backend) ✅ DONE
+## Step 1 — Supabase
 
-Project: `fzoqorshivzkjeoewgjr`
-- Database schema pushed
-- Edge function `platform` deployed
-- Treasury: `@sphere-predict`
+1. Link your project (if not already):
+   ```bash
+   npx supabase link --project-ref <your-project-ref>
+   ```
 
-To redeploy after changes:
+2. Push migrations and deploy the edge function:
+   ```bash
+   npm run supabase:push
+   npm run supabase:deploy
+   ```
+
+3. Confirm treasury address in `treasury_config` (default `@sphere-predict`).
+
+Redeploy after backend changes:
 ```bash
-npm run supabase:push
-npm run supabase:deploy
+npm run supabase:push      # schema only, when migrations change
+npm run supabase:deploy    # edge function only
 ```
 
 ---
 
 ## Step 2 — Vercel (frontend)
 
-1. Push repo to GitHub
-2. Import at https://vercel.com → Framework: **Vite**
-3. Add environment variables (Production):
+1. Import the GitHub repo at [vercel.com](https://vercel.com) — framework: **Vite**
+2. Set production environment variables:
 
-| Variable | Value |
-|----------|-------|
+| Variable | Description |
+|----------|-------------|
 | `VITE_WALLET_URL` | `https://sphere.unicity.network` |
-| `VITE_SUPABASE_URL` | `https://fzoqorshivzkjeoewgjr.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | `sb_publishable_HsMeeP1bbKKBYfR6WAtE4A_615bzhbQ` |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon / publishable key |
 | `VITE_TREASURY_ADDRESS` | `@sphere-predict` |
 
-4. Deploy
+3. Deploy. Do **not** set `VITE_MARKET_API_URL` in production.
 
-Run `npm run prod:check` before deploying to verify env vars.
+Validate before deploy:
+```bash
+npm run prod:check
+npm run build
+```
+
+Copy `.env.production.example` → `.env.production.local` for local production builds.
 
 ---
 
 ## Step 3 — Verify
 
-1. Open your Vercel URL
-2. Header should show **Supabase** (not REST API)
-3. Connect Sphere wallet
-4. Deposit → trade → check Portfolio
+1. Open the Vercel URL — app loads without "Production setup incomplete"
+2. Connect a Sphere wallet
+3. Deposit UCT → Portfolio balance updates
+4. Buy YES or NO on an open market
+5. Settings → About shows backend **supabase**
+6. Optional: withdraw a small amount and confirm treasury agent completes it
 
 ---
 
-## Step 4 — Treasury agent (autonomous withdrawals)
+## Step 4 — Background workers
 
-Withdrawals are queued in Supabase; the **treasury agent** sends UCT on testnet2 without manual admin clicks.
+Withdrawals are queued in Postgres. The **treasury agent** sends UCT on Sphere testnet2. The **DM worker** delivers queued Sphere messages (win + withdrawal notifications).
 
-1. Apply migration `006_withdrawal_processing.sql` in Supabase SQL Editor
-2. Set GitHub repo secrets (for `.github/workflows/treasury-agent.yml`):
-   - `TREASURY_MNEMONIC` — **secret**, wallet for `@sphere-predict`
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-   - `SPHERE_ORACLE_API_KEY` — optional; defaults to public testnet2 key if unset
-3. Enable GitHub Actions on the repo — runs every 5 minutes
+Both run from `.github/workflows/treasury-agent.yml` every 5 minutes (treasury first, then DMs).
 
-Local / long-running:
+### GitHub Actions secrets
+
+| Secret | Required | Notes |
+|--------|----------|-------|
+| `TREASURY_MNEMONIC` | Yes (live sends) | Mnemonic for `@sphere-predict` |
+| `SUPABASE_URL` | Yes | Same as `VITE_SUPABASE_URL` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase Dashboard → Settings → API |
+| `SPHERE_ORACLE_API_KEY` | No | Testnet2 gateway key if needed |
+
+Enable Actions on the repo, then run **Treasury Agent → Run workflow** once to test.
+
+### Local worker commands
+
+Add to `.env` (see `.env.example`):
+
 ```bash
-# .env with TREASURY_MNEMONIC + SUPABASE_* then:
-npm run treasury:worker              # one pass (live sends)
-npm run treasury:worker:loop         # poll every 60s
-npm run treasury:worker:status       # queue counts (no mnemonic needed)
-npm run treasury:worker:dry-run      # preview sends (no mnemonic, no writes)
+npm run treasury:worker:status    # queue counts (no mnemonic)
+npm run treasury:worker:dry-run   # preview sends, no writes
+npm run treasury:worker           # one live pass
+npm run treasury:worker:loop      # poll every 60s
+npm run dm:worker                 # process DM queue
+npm run dm:worker:dry-run
 ```
 
-### Test the agent (before going live)
+### Test before going live
 
-1. **Migration 006** — run `006_withdrawal_processing.sql` in Supabase SQL Editor
-2. **Queue status** (needs only `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `.env`):
-   ```bash
-   npm run treasury:worker:status
-   ```
-   Expect `submitted: 0` until someone withdraws.
-3. **Dry-run** — submit a small withdrawal in the app, then:
-   ```bash
-   npm run treasury:worker:dry-run
-   ```
-   Should list the pending row with recipient + amount; **no** on-chain send.
-4. **Live pass** — add `TREASURY_MNEMONIC` (+ optional `SPHERE_ORACLE_API_KEY`), then:
-   ```bash
-   npm run treasury:worker
-   ```
-   Check Supabase `withdrawals` → `status=completed` + `tx_reference`, and wallet received UCT.
-5. **GitHub Actions** — add secrets under **Settings → Secrets and variables → Actions**, then **Actions → Treasury Agent → Run workflow**.
+1. `npm run treasury:worker:status` — expect `submitted: 0` until someone withdraws
+2. Submit a small withdrawal in the app
+3. `npm run treasury:worker:dry-run` — should list the pending row; no on-chain send
+4. Add `TREASURY_MNEMONIC`, run `npm run treasury:worker`
+5. Check `withdrawals` table → `status=completed` + `tx_reference`; wallet received UCT
 
-**Treasury liquidity (testnet2).** User deposits send UCT to `@sphere-predict` in the **browser** wallet; the GitHub agent uses the same mnemonic but must **ingest** tokens via Nostr `receive()` + IPFS `sync()`. On testnet, if spendable UCT is still 0, the worker **auto-mints** 100 UCT by default (`TREASURY_AUTO_MINT=false` to disable, `TREASURY_MINT_TOPUP_UCT` to change amount). `TREASURY_MNEMONIC` must be the mnemonic for `@sphere-predict`.
+### Treasury liquidity
 
-**Agentic for campaign submission:** autonomous agent fulfills withdrawal queue (payments on network).
+User deposits send UCT to `@sphere-predict` from the browser wallet. The treasury agent uses the same mnemonic and must have spendable UCT to fulfill withdrawals (ingest via Sphere SDK `receive()` / sync as needed). Keep the treasury wallet funded on testnet.
+
+`TREASURY_MNEMONIC` must match `@sphere-predict`.
 
 ---
 
-## What NOT to use in production
+## What not to use in production
 
-- `api/` folder (legacy, deleted from Vercel deploy)
-- Fly.io / `VITE_MARKET_API_URL` (local dev fallback only)
-- `npm run backend` (local dev only)
+| Item | Why |
+|------|-----|
+| `VITE_MARKET_API_URL` | Local REST fallback only |
+| `npm run backend` / `backend/server.mjs` | Local dev only |
+| `legacy/` folder | Old Vercel API handler |
+| Fly.io | Removed; not part of current stack |
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| "Production setup incomplete" on Vercel | Set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` |
+| Settings/notifications 404 | `npm run supabase:deploy` |
+| Wallet history empty / RPC error | `npm run supabase:push` (migration 004+) |
+| Withdrawals stuck in `submitted` | Check GitHub Actions secrets + treasury balance |
+| DMs not arriving | Confirm user prefs (`dmOnWin` / `dmOnWithdrawal`); run `dm:worker` |
