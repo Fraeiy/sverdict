@@ -11,7 +11,7 @@ export function realizedPnl(position: Pick<Position, 'pnl' | 'payout' | 'stake_a
 }
 
 export function fmtUct(n: number) {
-  return `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} UCT`
+  return `${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} UCT`
 }
 
 export function fmtUsd(n: number) {
