@@ -1,7 +1,10 @@
 -- History RPC: prefer standardized payment_memo in detail field
+-- Must DROP first: Postgres cannot change parameter defaults via CREATE OR REPLACE
 
-create or replace function public.get_wallet_history(
-  p_wallet_address text,
+drop function if exists public.get_wallet_history(text, text, text);
+
+create function public.get_wallet_history(
+  p_wallet_address text default null,
   p_nametag text default null,
   p_direct_address text default null
 )
@@ -14,18 +17,20 @@ declare
   v_user_id uuid;
 begin
   with keys as (
-    select public.normalize_wallet_addr(p_wallet_address) as k
-    union select public.normalize_wallet_addr(coalesce(p_nametag, '')) where coalesce(p_nametag, '') <> ''
-    union select public.normalize_wallet_addr(coalesce(p_direct_address, '')) where coalesce(p_direct_address, '') <> ''
+    select public.normalize_wallet_addr(x) as k
+    from unnest(array[p_wallet_address, p_nametag, p_direct_address]) as x
+    where x is not null and btrim(x) <> ''
   )
   select u.id into v_user_id
   from users u
-  cross join keys k
-  where k.k is not null and k.k <> ''
-    and (
-      public.normalize_wallet_addr(u.wallet_address) = k.k
-      or (u.nametag is not null and public.normalize_wallet_addr(u.nametag) = k.k)
-    )
+  where exists (
+    select 1 from keys k
+    where k.k <> ''
+      and (
+        public.normalize_wallet_addr(u.wallet_address) = k.k
+        or (u.nametag is not null and public.normalize_wallet_addr(u.nametag) = k.k)
+      )
+  )
   limit 1;
 
   if v_user_id is null then
@@ -103,7 +108,6 @@ begin
         'created_at', coalesce(p.settled_at, p.created_at)
       )
       from positions p
-      left join markets m on m.id = p.market_id
       where p.user_id = v_user_id
         and p.status = 'settled'
         and coalesce(p.payout, 0) > 0
