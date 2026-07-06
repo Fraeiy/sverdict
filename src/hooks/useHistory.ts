@@ -22,8 +22,7 @@ export function useHistory(identity: WalletIdentity | null, opts?: { poll?: bool
       const { history } = await api.fetchHistory(auth)
       setEntries(history ?? [])
       return history ?? []
-    } catch (e) {
-      console.error('fetchHistory failed', e)
+    } catch {
       setEntries([])
       return []
     } finally {

@@ -62,11 +62,14 @@ export function AdminPage({ identity, onToast }: Props) {
       setCounts(c || {})
       setRecent((r || []) as QueueRow[])
     } catch (e) {
-      onToast(e instanceof Error ? e.message : 'Failed to load withdrawal queue', 'error')
+      const msg = e instanceof Error ? e.message : 'Failed to load withdrawal queue'
+      if (!msg.includes('Not found') && !msg.includes('404')) {
+        onToast(msg, 'error')
+      }
     } finally {
       setQueueLoading(false)
     }
-  }, [platform, onToast])
+  }, [platform.isAdmin, platform.withdrawalQueue, onToast])
 
   const loadPending = useCallback(async () => {
     if (!platform.isAdmin) return

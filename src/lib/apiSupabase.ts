@@ -21,7 +21,11 @@ async function invoke<T>(route: string, init?: { method?: string; payload?: unkn
   })
   const payload = data as { error?: string } | null
   if (error) {
-    throw new Error(payload?.error || error.message || 'Supabase function error')
+    const msg = payload?.error || error.message || 'Supabase function error'
+    const hint = msg.includes('Not found') || error.message?.includes('404')
+      ? ' — run npm run supabase:deploy'
+      : ''
+    throw new Error(`${msg}${hint}`)
   }
   if (payload?.error) throw new Error(payload.error)
   return data as T

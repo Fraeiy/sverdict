@@ -36,42 +36,54 @@ export function usePlatform(identity: WalletIdentity | null) {
     bootstrap().catch(() => setLoading(false))
   }, [bootstrap])
 
+  const createMarket = useCallback(async (payload: {
+    question: string
+    description?: string
+    resolutionCriteria?: string
+    category: string
+    daysOpen: number
+  }) => {
+    if (!auth) throw new Error('Not connected')
+    const { market } = await api.adminCreateMarket(auth, payload)
+    return market as Market
+  }, [auth])
+
+  const resolveMarket = useCallback(async (marketId: string, resolution: 'YES' | 'NO') => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminResolveMarket(auth, marketId, resolution)
+  }, [auth])
+
+  const closeMarket = useCallback(async (marketId: string) => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminCloseMarket(auth, marketId)
+  }, [auth])
+
+  const withdrawalQueue = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminWithdrawalQueue(auth)
+  }, [auth])
+
+  const listPendingWithdrawals = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminListPendingWithdrawals(auth)
+  }, [auth])
+
+  const fulfillWithdrawal = useCallback(async (withdrawalId: string, txReference?: string) => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminFulfillWithdrawal(auth, withdrawalId, txReference)
+  }, [auth])
+
   return {
     user,
     auth,
     treasuryAddress,
     loading,
     isAdmin: !!user?.is_admin,
-    async createMarket(payload: {
-      question: string
-      description?: string
-      resolutionCriteria?: string
-      category: string
-      daysOpen: number
-    }) {
-      if (!auth) throw new Error('Not connected')
-      const { market } = await api.adminCreateMarket(auth, payload)
-      return market as Market
-    },
-    async resolveMarket(marketId: string, resolution: 'YES' | 'NO') {
-      if (!auth) throw new Error('Not connected')
-      return api.adminResolveMarket(auth, marketId, resolution)
-    },
-    async closeMarket(marketId: string) {
-      if (!auth) throw new Error('Not connected')
-      return api.adminCloseMarket(auth, marketId)
-    },
-    async withdrawalQueue() {
-      if (!auth) throw new Error('Not connected')
-      return api.adminWithdrawalQueue(auth)
-    },
-    async listPendingWithdrawals() {
-      if (!auth) throw new Error('Not connected')
-      return api.adminListPendingWithdrawals(auth)
-    },
-    async fulfillWithdrawal(withdrawalId: string, txReference?: string) {
-      if (!auth) throw new Error('Not connected')
-      return api.adminFulfillWithdrawal(auth, withdrawalId, txReference)
-    },
+    createMarket,
+    resolveMarket,
+    closeMarket,
+    withdrawalQueue,
+    listPendingWithdrawals,
+    fulfillWithdrawal,
   }
 }
