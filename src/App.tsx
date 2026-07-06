@@ -87,7 +87,7 @@ export default function App() {
             path="admin"
             element={
               platform.isAdmin
-                ? <AdminPage identity={wallet.identity} onToast={showToast} />
+                ? <AdminPage platform={platform} onToast={showToast} />
                 : <Navigate to="/" replace />
             }
           />

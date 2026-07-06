@@ -9,7 +9,10 @@ export function usePlatform(identity: WalletIdentity | null) {
   const [user, setUser] = useState<User | null>(null)
   const [treasuryAddress, setTreasuryAddress] = useState(getTreasuryAddressFallback())
   const [loading, setLoading] = useState(true)
-  const auth = useMemo(() => authFromIdentity(identity), [identity])
+  const auth = useMemo(
+    () => authFromIdentity(identity),
+    [identity?.nametag, identity?.directAddress, identity?.publicKey],
+  )
 
   const bootstrap = useCallback(async () => {
     if (!auth) {
@@ -73,7 +76,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     return api.adminFulfillWithdrawal(auth, withdrawalId, txReference)
   }, [auth])
 
-  return {
+  return useMemo(() => ({
     user,
     auth,
     treasuryAddress,
@@ -85,5 +88,18 @@ export function usePlatform(identity: WalletIdentity | null) {
     withdrawalQueue,
     listPendingWithdrawals,
     fulfillWithdrawal,
-  }
+  }), [
+    user,
+    auth,
+    treasuryAddress,
+    loading,
+    createMarket,
+    resolveMarket,
+    closeMarket,
+    withdrawalQueue,
+    listPendingWithdrawals,
+    fulfillWithdrawal,
+  ])
 }
+
+export type PlatformApi = ReturnType<typeof usePlatform>

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMarkets } from '../hooks/useMarkets'
-import { usePlatform } from '../hooks/usePlatform'
-import type { WalletIdentity } from '../lib/types'
+import type { PlatformApi } from '../hooks/usePlatform'
 import { fmtUct, timeRemaining } from '../lib/format'
 
 const CATEGORIES = ['CRYPTO', 'SPORTS', 'POLITICS', 'TECH', 'FINANCE', 'OTHER']
@@ -33,13 +32,12 @@ const STATUS_CHIP: Record<string, string> = {
 }
 
 type Props = {
-  identity: WalletIdentity | null
+  platform: PlatformApi
   onToast: (msg: string, type?: 'success' | 'error') => void
 }
 
-export function AdminPage({ identity, onToast }: Props) {
-  const platform = usePlatform(identity)
-  const { markets, load } = useMarkets({ autoLoad: true })
+export function AdminPage({ platform, onToast }: Props) {
+  const { markets, load } = useMarkets({ autoLoad: false })
 
   const [question, setQuestion] = useState('')
   const [description, setDescription] = useState('')
@@ -53,11 +51,14 @@ export function AdminPage({ identity, onToast }: Props) {
   const [showManual, setShowManual] = useState(false)
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
   const [fulfillingId, setFulfillingId] = useState<string | null>(null)
+
+  const onToastRef = useRef(onToast)
+  onToastRef.current = onToast
+  const platformRef = useRef(platform)
+  platformRef.current = platform
   const queueApiAvailable = useRef(true)
 
-  const loadPendingFallback = useCallback(async () => {
-    const { withdrawals } = await platform.listPendingWithdrawals()
-    const pending = (withdrawals || []) as PendingWithdrawal[]
+  const applyPendingFallback = useCallback((pending: PendingWithdrawal[]) => {
     setCounts({
       submitted: pending.length,
       processing: 0,
@@ -71,17 +72,19 @@ export function AdminPage({ identity, onToast }: Props) {
       created_at: w.created_at,
       users: w.users,
     })))
-  }, [platform.listPendingWithdrawals])
+  }, [])
 
   const loadQueue = useCallback(async () => {
-    if (!platform.isAdmin) return
+    const p = platformRef.current
+    if (!p.isAdmin) return
     setQueueLoading(true)
     try {
       if (!queueApiAvailable.current) {
-        await loadPendingFallback()
+        const { withdrawals } = await p.listPendingWithdrawals()
+        applyPendingFallback((withdrawals || []) as PendingWithdrawal[])
         return
       }
-      const { counts: c, recent: r } = await platform.withdrawalQueue()
+      const { counts: c, recent: r } = await p.withdrawalQueue()
       setCounts(c || {})
       setRecent((r || []) as QueueRow[])
     } catch (e) {
@@ -90,29 +93,36 @@ export function AdminPage({ identity, onToast }: Props) {
       if (staleEdge) {
         queueApiAvailable.current = false
         try {
-          await loadPendingFallback()
+          const { withdrawals } = await p.listPendingWithdrawals()
+          applyPendingFallback((withdrawals || []) as PendingWithdrawal[])
         } catch { /* ignore */ }
       } else {
-        onToast(msg || 'Failed to load withdrawal queue', 'error')
+        onToastRef.current(msg || 'Failed to load withdrawal queue', 'error')
       }
     } finally {
       setQueueLoading(false)
     }
-  }, [platform.isAdmin, platform.withdrawalQueue, loadPendingFallback, onToast])
+  }, [applyPendingFallback])
 
   const loadPending = useCallback(async () => {
-    if (!platform.isAdmin) return
+    const p = platformRef.current
+    if (!p.isAdmin) return
     try {
-      const { withdrawals } = await platform.listPendingWithdrawals()
+      const { withdrawals } = await p.listPendingWithdrawals()
       setPendingWithdrawals((withdrawals || []) as PendingWithdrawal[])
     } catch { /* optional for manual override */ }
-  }, [platform])
+  }, [])
 
   useEffect(() => {
+    load({ trending: true }).catch(() => {})
+  }, [load])
+
+  useEffect(() => {
+    if (!platform.isAdmin) return
     loadQueue().catch(() => {})
     const interval = setInterval(() => loadQueue().catch(() => {}), 30_000)
     return () => clearInterval(interval)
-  }, [loadQueue])
+  }, [platform.isAdmin, loadQueue])
 
   async function createMarket() {
     if (!question.trim()) {
