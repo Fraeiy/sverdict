@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMarkets } from '../hooks/useMarkets'
 import { usePlatform } from '../hooks/usePlatform'
 import type { WalletIdentity } from '../lib/types'
@@ -53,23 +53,52 @@ export function AdminPage({ identity, onToast }: Props) {
   const [showManual, setShowManual] = useState(false)
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
   const [fulfillingId, setFulfillingId] = useState<string | null>(null)
+  const queueApiAvailable = useRef(true)
+
+  const loadPendingFallback = useCallback(async () => {
+    const { withdrawals } = await platform.listPendingWithdrawals()
+    const pending = (withdrawals || []) as PendingWithdrawal[]
+    setCounts({
+      submitted: pending.length,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+    })
+    setRecent(pending.map(w => ({
+      id: w.id,
+      amount: w.amount,
+      status: w.status || 'submitted',
+      created_at: w.created_at,
+      users: w.users,
+    })))
+  }, [platform.listPendingWithdrawals])
 
   const loadQueue = useCallback(async () => {
     if (!platform.isAdmin) return
     setQueueLoading(true)
     try {
+      if (!queueApiAvailable.current) {
+        await loadPendingFallback()
+        return
+      }
       const { counts: c, recent: r } = await platform.withdrawalQueue()
       setCounts(c || {})
       setRecent((r || []) as QueueRow[])
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load withdrawal queue'
-      if (!msg.includes('Not found') && !msg.includes('404')) {
-        onToast(msg, 'error')
+      const msg = e instanceof Error ? e.message : ''
+      const staleEdge = msg.includes('Not found') || msg.includes('404')
+      if (staleEdge) {
+        queueApiAvailable.current = false
+        try {
+          await loadPendingFallback()
+        } catch { /* ignore */ }
+      } else {
+        onToast(msg || 'Failed to load withdrawal queue', 'error')
       }
     } finally {
       setQueueLoading(false)
     }
-  }, [platform.isAdmin, platform.withdrawalQueue, onToast])
+  }, [platform.isAdmin, platform.withdrawalQueue, loadPendingFallback, onToast])
 
   const loadPending = useCallback(async () => {
     if (!platform.isAdmin) return
