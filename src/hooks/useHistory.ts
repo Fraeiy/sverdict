@@ -2,15 +2,32 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as api from '../lib/api'
 import { authFromIdentity } from '../lib/auth'
 import { getBackendMode } from '../lib/config'
-import type { HistoryEntry, WalletIdentity } from '../lib/types'
+import type { HistoryEntry, WalletIdentity, WithdrawalStatus } from '../lib/types'
 
 const POLL_MS = 45_000
+const PENDING_POLL_MS = 15_000
+
+const PENDING_STATUSES: WithdrawalStatus[] = ['submitted', 'processing']
+
+export function isPendingWithdrawal(entry: HistoryEntry) {
+  return entry.type === 'withdrawal'
+    && !!entry.status
+    && PENDING_STATUSES.includes(entry.status as WithdrawalStatus)
+}
 
 export function useHistory(identity: WalletIdentity | null, opts?: { poll?: boolean }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const auth = useMemo(() => authFromIdentity(identity), [identity])
+  const auth = useMemo(
+    () => authFromIdentity(identity),
+    [identity?.nametag, identity?.directAddress, identity?.publicKey],
+  )
   const shouldPoll = opts?.poll !== false && getBackendMode() === 'supabase'
+
+  const pendingWithdrawals = useMemo(
+    () => entries.filter(isPendingWithdrawal),
+    [entries],
+  )
 
   const refresh = useCallback(async () => {
     if (!auth) {
@@ -38,12 +55,13 @@ export function useHistory(identity: WalletIdentity | null, opts?: { poll?: bool
   useEffect(() => {
     if (!auth || !shouldPoll) return
 
+    const pollMs = pendingWithdrawals.length > 0 ? PENDING_POLL_MS : POLL_MS
     const interval = setInterval(() => {
       refresh().catch(() => {})
-    }, POLL_MS)
+    }, pollMs)
 
     return () => clearInterval(interval)
-  }, [auth, shouldPoll, refresh])
+  }, [auth, shouldPoll, refresh, pendingWithdrawals.length])
 
-  return { entries, loading, refresh }
+  return { entries, loading, pendingWithdrawals, refresh }
 }

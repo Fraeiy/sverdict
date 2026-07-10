@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FundingPanel } from '../components/portfolio/FundingPanel'
 import { HistoryList } from '../components/portfolio/HistoryList'
+import { PendingWithdrawalBanner } from '../components/portfolio/PendingWithdrawalBanner'
 import { PositionCard } from '../components/portfolio/PositionCard'
 import { useHistory } from '../hooks/useHistory'
 import { usePositions } from '../hooks/usePositions'
@@ -32,14 +33,36 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
 
   const platform = usePlatform(identity)
   const { portfolio, openPositions, resolvedPositions, availableBalance, deposit, withdraw, loading, refresh } = usePositions(identity)
-  const { entries: history, loading: historyLoading, refresh: refreshHistory } = useHistory(identity)
+  const { entries: history, loading: historyLoading, pendingWithdrawals, refresh: refreshHistory } = useHistory(identity)
   const { depositToPortfolio } = useSpherePayment(wallet, platform.treasuryAddress)
+  const withdrawalStatusRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
     const next = tabFromParam(searchParams.get('tab'))
     setTab(next)
     if (next === 'history') refreshHistory().catch(() => {})
   }, [searchParams, refreshHistory])
+
+  useEffect(() => {
+    for (const entry of history) {
+      if (entry.type !== 'withdrawal' || !entry.status) continue
+      const prev = withdrawalStatusRef.current.get(entry.id)
+      const status = String(entry.status)
+      if (prev !== undefined && prev !== status) {
+        if (status === 'completed') {
+          onToast(`${fmtUct(entry.amount)} sent to your Sphere wallet`, 'success')
+          refresh().catch(() => {})
+          wallet.refreshBalance?.()
+        } else if (status === 'failed') {
+          onToast(`${fmtUct(entry.amount)} withdrawal failed — balance restored`, 'error')
+          refresh().catch(() => {})
+        } else if (status === 'processing' && prev === 'submitted') {
+          onToast(`Treasury is sending ${fmtUct(entry.amount)}…`, 'info')
+        }
+      }
+      withdrawalStatusRef.current.set(entry.id, status)
+    }
+  }, [history, onToast, refresh, wallet])
 
   function selectTab(next: Tab) {
     setTab(next)
@@ -103,6 +126,12 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
         onDeposit={handleDeposit}
         onWithdraw={handleWithdraw}
       />
+
+      {pendingWithdrawals.length > 0 && (
+        <div className="mt-6">
+          <PendingWithdrawalBanner pending={pendingWithdrawals} />
+        </div>
+      )}
 
       <div className="tab-nav mt-8 flex gap-1">
         {tabs.map(t => (
