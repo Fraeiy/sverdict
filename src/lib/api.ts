@@ -24,6 +24,7 @@ export const adminWithdrawalQueue = impl.adminWithdrawalQueue
 export const adminListPendingWithdrawals = impl.adminListPendingWithdrawals
 export const adminFulfillWithdrawal = impl.adminFulfillWithdrawal
 export const subscribeToMarkets = impl.subscribeToMarkets
+export const subscribeToMarket = impl.subscribeToMarket
 export const fetchSettings = impl.fetchSettings
 export const updateSettings = impl.updateSettings
 export const fetchNotifications = impl.fetchNotifications

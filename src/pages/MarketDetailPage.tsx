@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { TradeConfirmModal } from '../components/ui/TradeConfirmModal'
-import { useMarkets } from '../hooks/useMarkets'
+import { useMarket } from '../hooks/useMarket'
 import { usePositions } from '../hooks/usePositions'
 import { useUserSettings } from '../hooks/useUserSettings'
-import type { Market, Outcome } from '../lib/types'
+import type { Outcome } from '../lib/types'
 import { loadCachedPreferences } from '../lib/userSettings'
 import { fmtUct, noProbability, timeRemaining, yesProbability } from '../lib/format'
 
@@ -16,20 +16,18 @@ type Props = {
 export function MarketDetailPage({ identity, onToast }: Props) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { getMarket } = useMarkets({ autoLoad: false })
+  const { market, loading: marketLoading, error: marketError, oddsUpdated, isLive } = useMarket(id)
   const { placeTrade, availableBalance, refresh } = usePositions(identity)
   const { preferences } = useUserSettings(identity)
 
-  const [market, setMarket] = useState<Market | null>(null)
   const [amount, setAmount] = useState(() => String(loadCachedPreferences().defaultStake))
   const [loading, setLoading] = useState<Outcome | null>(null)
   const [confirmOutcome, setConfirmOutcome] = useState<Outcome | null>(null)
   const stakeInitialized = useRef(false)
 
   useEffect(() => {
-    if (!id) return
-    getMarket(id).then(setMarket).catch(() => onToast('Market not found', 'error'))
-  }, [id, getMarket, onToast])
+    if (marketError) onToast('Market not found', 'error')
+  }, [marketError, onToast])
 
   useEffect(() => {
     refresh().catch(() => {})
@@ -42,7 +40,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
     }
   }, [preferences.defaultStake])
 
-  if (!market) {
+  if (marketLoading || !market) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
         <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-[var(--color-gold)] border-t-transparent" />
@@ -124,14 +122,36 @@ export function MarketDetailPage({ identity, onToast }: Props) {
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-2 gap-4">
-        <div className="stat-block border-[rgba(251,191,36,0.25)] text-center">
+      <div className="mt-8 flex items-center justify-between gap-3">
+        <p className="label-caps">Live odds</p>
+        {isLive && (
+          <span className={`flex items-center gap-1.5 font-data text-[9px] uppercase tracking-wider ${
+            oddsUpdated ? 'text-[var(--color-gold-bright)]' : 'text-[var(--color-muted)]'
+          }`}>
+            <span className="live-dot" />
+            {oddsUpdated ? 'Updated' : 'Live'}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-4">
+        <div className={`stat-block border-[rgba(251,191,36,0.25)] text-center transition ${
+          oddsUpdated ? 'ring-1 ring-[rgba(251,191,36,0.45)]' : ''
+        }`}>
           <p className="label-caps text-[var(--color-gold-bright)]">YES probability</p>
           <p className="mt-2 font-data text-4xl font-bold text-[var(--color-gold-bright)]">{yes}%</p>
+          <p className="mt-2 font-data text-[10px] text-[var(--color-muted)]">
+            Pool {fmtUct(market.yes_pool || 0)}
+          </p>
         </div>
-        <div className="stat-block border-[rgba(248,113,113,0.25)] text-center">
+        <div className={`stat-block border-[rgba(248,113,113,0.25)] text-center transition ${
+          oddsUpdated ? 'ring-1 ring-[rgba(248,113,113,0.35)]' : ''
+        }`}>
           <p className="label-caps text-[var(--color-no)]">NO probability</p>
           <p className="mt-2 font-data text-4xl font-bold text-[var(--color-no)]">{no}%</p>
+          <p className="mt-2 font-data text-[10px] text-[var(--color-muted)]">
+            Pool {fmtUct(market.no_pool || 0)}
+          </p>
         </div>
       </div>
 
@@ -141,6 +161,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
 
       <div className="mt-3 flex justify-between font-data text-[10px] text-[var(--color-muted)]">
         <span>VOL <span className="text-[var(--color-gold)]">{fmtUct(market.volume || 0)}</span></span>
+        <span>Liquidity <span className="text-[var(--color-text-2)]">{fmtUct((market.yes_pool || 0) + (market.no_pool || 0))}</span></span>
         <span>Closes {new Date(market.deadline).toLocaleDateString()}</span>
       </div>
 

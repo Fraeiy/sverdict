@@ -163,3 +163,7 @@ export async function markNotificationsRead(_auth: AuthHeaders, _opts: { all?: b
 export function subscribeToMarkets(_onUpdate: () => void) {
   return () => {}
 }
+
+export function subscribeToMarket(_marketId: string, _onUpdate: (market: import('./types').Market) => void) {
+  return () => {}
+}

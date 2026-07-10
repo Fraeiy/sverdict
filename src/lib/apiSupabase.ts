@@ -201,3 +201,20 @@ export function subscribeToMarkets(onUpdate: () => void) {
   return () => { supabase?.removeChannel(channel) }
 }
 
+export function subscribeToMarket(marketId: string, onUpdate: (market: Market) => void) {
+  if (!supabase) return () => {}
+  const channel = supabase
+    .channel(`market-${marketId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'markets', filter: `id=eq.${marketId}` },
+      payload => {
+        if (payload.new && typeof payload.new === 'object') {
+          onUpdate(enrichMarket(payload.new as Market))
+        }
+      },
+    )
+    .subscribe()
+  return () => { supabase?.removeChannel(channel) }
+}
+
