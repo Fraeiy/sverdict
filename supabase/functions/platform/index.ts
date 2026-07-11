@@ -571,7 +571,8 @@ Deno.serve(async (req) => {
     }
 
     if (route === '/withdrawals' && req.method === 'POST') {
-      const amount = Number(payload.amount)
+      const rawAmount = Number(payload.amount)
+      const amount = Math.round(rawAmount * 100) / 100
       const bal = await getBalance(db, user.id)
       if (!amount || amount <= 0 || amount > bal) throw new Error('Insufficient portfolio balance')
       // Reserve funds in portfolio ledger; treasury (@sphere-predict) sends UCT on-chain when admin fulfills.
@@ -589,7 +590,7 @@ Deno.serve(async (req) => {
         user.id,
         'withdrawal',
         'Withdrawal queued',
-        `${amount.toFixed(2)} UCT queued — treasury will send to your Sphere wallet.`,
+        `${amount.toFixed(2)} UCT queued — treasury will send to your Sphere wallet (may arrive as one or more transfers; total will match).`,
         { amount, withdrawalId: withdrawal?.id },
       ).catch(() => {})
       return json({ portfolio: await getPortfolio(db, user.id), withdrawal })

@@ -20,10 +20,12 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { humanToRawBigInt, normalizeRecipient, rawToHuman } from './lib/constants.mjs'
+import { normalizeRecipient, rawToHuman } from './lib/constants.mjs'
 import { buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
+import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInventory.mjs'
+import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
 import { getUctDecimals, initTreasurySphere } from './lib/sphereProviders.mjs'
 
 loadProjectEnv()
@@ -171,6 +173,19 @@ function isSpendableInventoryError(reason) {
   return /insufficient balance/i.test(reason)
 }
 
+function isSendSettled(status) {
+  return status === 'confirmed' || status === 'delivered' || status === 'completed'
+}
+
+function countRecipientDeliveries(result) {
+  const transfers = result?.tokenTransfers
+  if (Array.isArray(transfers) && transfers.length > 0) {
+    return transfers.filter(t => t?.method === 'direct' || t?.method === 'split').length
+  }
+  const tokens = result?.tokens
+  return Array.isArray(tokens) ? tokens.length : 1
+}
+
 async function resetStaleProcessing(db) {
   const cutoff = new Date(Date.now() - STALE_MINUTES * 60_000).toISOString()
   const { data } = await db.from('withdrawals')
@@ -219,7 +234,7 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
   let processed = 0
 
   for (const w of pending) {
-    const amount = Number(Number(w.amount).toFixed(4))
+    const amount = normalizeWithdrawalAmount(w.amount)
     const user = w.users
     const recipientRaw = user?.nametag || user?.wallet_address
 
@@ -238,9 +253,10 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
 
     const recipient = normalizeRecipient(recipientRaw)
     const memo = buildWithdrawMemo(w.id)
+    const sendRaw = withdrawalAmountToRaw(amount, treasuryUctDecimals)
 
     if (dryRun) {
-      console.log(`  → would send ${amount} UCT to ${recipient} (${w.id}) memo=${memo}`)
+      console.log(`  → would send ${formatWithdrawalAmount(amount)} UCT to ${recipient} (${w.id}) memo=${memo}`)
       processed += 1
       continue
     }
@@ -256,7 +272,6 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
 
     let sendCompleted = false
     try {
-      const sendRaw = humanToRawBigInt(amount, treasuryUctDecimals)
       if (sendRaw <= 0n) {
         await failWithdrawal(db, w, 'Invalid raw amount after conversion', { recredit: true })
         continue
@@ -269,20 +284,58 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         )
         bal = await refreshSpendableInventory(sphere)
       }
+      if (bal.raw < sendRaw) {
+        await failWithdrawal(db, w, `Treasury has only ${formatWithdrawalAmount(bal.human)} UCT spendable on-chain`, {
+          recredit: true,
+          requeue: false,
+        })
+        continue
+      }
+
+      const inventory = summarizeUctInventory(sphere)
+      const estDeliveries = estimateDeliveryCount(inventory.tokens, sendRaw)
+      if (inventory.tokenCount > 1) {
+        console.log(
+          `[treasury-agent] treasury holds ${inventory.tokenCount} UCT coin(s); withdrawal ${w.id} `
+          + `will likely arrive as ~${estDeliveries > 0 ? estDeliveries : '?'} Sphere transfer(s) `
+          + `(largest coin ${formatWithdrawalAmount(inventory.largestHuman)} UCT)`,
+        )
+      }
+      if (inventory.largestRaw < sendRaw) {
+        console.warn(
+          `[treasury-agent] no single treasury coin covers ${formatWithdrawalAmount(amount)} UCT — `
+          + 'user will see multiple wallet notifications; total should still match',
+        )
+      }
 
       console.log(
-        `[treasury-agent] sending ${amount.toFixed(4)} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`,
+        `[treasury-agent] sending ${formatWithdrawalAmount(amount)} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`,
       )
       const result = await sphere.payments.send({
         recipient,
         amount: String(sendRaw),
         coinId: 'UCT',
         memo,
+        transferMode: 'conservative',
       })
       sendCompleted = true
-      if (result?.deliveryPending) {
-        console.log(`[treasury-agent] ${w.id} certified on-chain; mailbox delivery deferred (normal v2 behavior)`)
+
+      if (typeof sphere.payments.waitForPendingOperations === 'function') {
+        await sphere.payments.waitForPendingOperations()
       }
+
+      if (!isSendSettled(result?.status)) {
+        throw new Error(`Send did not settle (status=${result?.status || 'unknown'})`)
+      }
+
+      const deliveryCount = countRecipientDeliveries(result)
+      if (deliveryCount > 1) {
+        console.log(
+          `[treasury-agent] ${w.id} used ${deliveryCount} source token(s) — `
+          + 'recipient may see multiple inbox entries with the same memo',
+        )
+      }
+
       const ref = txReference(result)
 
       // Persist completion immediately — do not let notify/DM failures requeue a successful on-chain send.
@@ -296,12 +349,15 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
       if (completeErr) throw completeErr
 
       try {
+        const deliveryNote = deliveryCount > 1
+          ? ` Arrived as ${deliveryCount} Sphere transfers (same memo); total ${formatWithdrawalAmount(amount)} UCT.`
+          : ''
         await notify(
           db,
           w.user_id,
           'Withdrawal sent',
-          `${amount.toFixed(2)} UCT sent from treasury to ${recipient}.`,
-          { withdrawalId: w.id, amount, txReference: ref, agent: 'treasury-worker' },
+          `${formatWithdrawalAmount(amount)} UCT sent from treasury to ${recipient}.${deliveryNote}`,
+          { withdrawalId: w.id, amount, txReference: ref, deliveryCount, agent: 'treasury-worker' },
         )
         const dmPrefs = w.users?.preferences
         const dmOn = dmPrefs?.dmOnWithdrawal !== false

@@ -113,6 +113,14 @@ User deposits send UCT to `@sphere-predict` from the browser wallet. The treasur
 
 `TREASURY_MNEMONIC` must match `@sphere-predict`.
 
+### Withdrawal delivery (multiple Sphere inbox lines)
+
+Sphere stores UCT as separate on-chain **tokens** (like coins/UTXOs). Each user deposit creates another token in `@sphere-predict`. When the treasury agent pays a withdrawal, the SDK may spend several source tokens — **each one shows up as a separate “Received” line** in the Sphere wallet, often with ugly float noise (`4.99999999899999795`).
+
+This is normal Sphere v2 behavior, not multiple withdrawals. The lines share the same memo (`SP:v1:withdraw:wid=…`) and should **sum to the queued amount** (e.g. 15.00 UCT). You get **one clean transfer** only when treasury holds a **single coin ≥ the withdrawal amount** (one large deposit, or manual consolidation in the Sphere wallet).
+
+The treasury worker logs `used N source token(s)` when this happens. If the total received is **less** than the queued amount, check GitHub Actions logs and the `withdrawals` row amount — the agent now fails closed when on-chain spendable balance is too low instead of marking `completed`.
+
 ---
 
 ## What not to use in production
