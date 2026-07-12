@@ -34,5 +34,15 @@ export default defineConfig({
   build: {
     target: 'es2020',
     commonjsOptions: { transformMixedEsModules: true },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/@unicitylabs/sphere-sdk')) return 'sphere-sdk'
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            return 'vendor'
+          }
+        },
+      },
+    },
   },
 })

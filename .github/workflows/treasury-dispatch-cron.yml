@@ -1,0 +1,32 @@
+# Lightweight ping — triggers Treasury Agent via repository_dispatch every 10 min.
+# Add repo secret: TREASURY_TRIGGER_PAT (classic PAT with repo scope).
+# Backup for machines without the Windows scheduled task.
+
+name: Treasury Dispatch Cron
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger treasury-tick
+        env:
+          PAT: ${{ secrets.TREASURY_TRIGGER_PAT }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "TREASURY_TRIGGER_PAT not set — skip (use scripts/install-treasury-scheduler.ps1 locally)"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type":"treasury-tick"}')
+          echo "dispatch HTTP $code"
+          test "$code" = "204"

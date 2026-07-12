@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMarkets } from '../hooks/useMarkets'
 import type { PlatformApi } from '../hooks/usePlatform'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { fmtUct, formatAge, timeRemaining, type WorkerHealth } from '../lib/format'
 
 const CATEGORIES = ['CRYPTO', 'SPORTS', 'POLITICS', 'TECH', 'FINANCE', 'OTHER']
@@ -97,35 +98,62 @@ export function AdminPage({ platform, onToast }: Props) {
     })))
   }, [])
 
-  const loadQueue = useCallback(async () => {
+  const applyTreasury = useCallback((s: {
+    onChainBalance: number
+    spendableAfterReserves: number
+    uctTokenCount: number
+    largestCoin: number
+    seedPerMarket: number
+    statusFresh: boolean
+    statusUpdatedAt: string | null
+    workerHealth: WorkerHealth
+    statusAgeMinutes: number | null
+  }) => {
+    setOnChainBalance(s.onChainBalance)
+    setSpendableBalance(s.spendableAfterReserves)
+    setUctTokenCount(s.uctTokenCount)
+    setLargestCoin(s.largestCoin)
+    setSeedPerMarket(s.seedPerMarket)
+    setTreasuryStatusFresh(s.statusFresh)
+    setWorkerLastRunAt(s.statusUpdatedAt)
+    setWorkerHealth(s.workerHealth)
+    setWorkerAgeMinutes(s.statusAgeMinutes)
+  }, [])
+
+  const loadDashboard = useCallback(async () => {
     const p = platformRef.current
     if (!p.isAdmin) return
     setQueueLoading(true)
+    setSeedQueueLoading(true)
     try {
-      if (!queueApiAvailable.current) {
-        const { withdrawals } = await p.listPendingWithdrawals()
-        applyPendingFallback((withdrawals || []) as PendingWithdrawal[])
-        return
-      }
-      const { counts: c, recent: r } = await p.withdrawalQueue()
-      setCounts(c || {})
-      setRecent((r || []) as QueueRow[])
+      const { treasury, withdrawals, seeds } = await p.adminDashboard()
+      applyTreasury(treasury)
+      setCounts(withdrawals.counts || {})
+      setRecent((withdrawals.recent || []) as QueueRow[])
+      setSeedCounts(seeds.counts || {})
+      setRecentSeeds((seeds.recent || []) as SeedQueueRow[])
+      queueApiAvailable.current = true
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''
       const staleEdge = msg.includes('Not found') || msg.includes('404')
       if (staleEdge) {
         queueApiAvailable.current = false
         try {
-          const { withdrawals } = await p.listPendingWithdrawals()
-          applyPendingFallback((withdrawals || []) as PendingWithdrawal[])
+          const [pending, treasury] = await Promise.all([
+            p.listPendingWithdrawals(),
+            p.treasurySeed().catch(() => null),
+          ])
+          applyPendingFallback((pending.withdrawals || []) as PendingWithdrawal[])
+          if (treasury) applyTreasury(treasury)
         } catch { /* ignore */ }
       } else {
-        onToastRef.current(msg || 'Failed to load withdrawal queue', 'error')
+        onToastRef.current(msg || 'Failed to load admin dashboard', 'error')
       }
     } finally {
       setQueueLoading(false)
+      setSeedQueueLoading(false)
     }
-  }, [applyPendingFallback])
+  }, [applyPendingFallback, applyTreasury])
 
   const loadPending = useCallback(async () => {
     const p = platformRef.current
@@ -140,58 +168,7 @@ export function AdminPage({ platform, onToast }: Props) {
     load({ trending: true, includePendingSeed: true }).catch(() => {})
   }, [load])
 
-  const loadTreasurySeed = useCallback(async () => {
-    if (!platform.isAdmin) return
-    try {
-      const s = await platform.treasurySeed()
-      setOnChainBalance(s.onChainBalance)
-      setSpendableBalance(s.spendableAfterReserves)
-      setUctTokenCount(s.uctTokenCount)
-      setLargestCoin(s.largestCoin)
-      setSeedPerMarket(s.seedPerMarket)
-      setTreasuryStatusFresh(s.statusFresh)
-      setWorkerLastRunAt(s.statusUpdatedAt)
-      setWorkerHealth(s.workerHealth)
-      setWorkerAgeMinutes(s.statusAgeMinutes)
-    } catch {
-      setOnChainBalance(null)
-      setSpendableBalance(null)
-      setUctTokenCount(null)
-      setLargestCoin(null)
-      setTreasuryStatusFresh(false)
-      setWorkerLastRunAt(null)
-      setWorkerHealth('unknown')
-      setWorkerAgeMinutes(null)
-    }
-  }, [platform])
-
-  const loadSeedQueue = useCallback(async () => {
-    const p = platformRef.current
-    if (!p.isAdmin) return
-    setSeedQueueLoading(true)
-    try {
-      const { counts: c, recent: r } = await p.marketSeedQueue()
-      setSeedCounts(c || {})
-      setRecentSeeds((r || []) as SeedQueueRow[])
-    } catch {
-      /* optional until edge function deployed */
-    } finally {
-      setSeedQueueLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!platform.isAdmin) return
-    loadQueue().catch(() => {})
-    loadTreasurySeed().catch(() => {})
-    loadSeedQueue().catch(() => {})
-    const interval = setInterval(() => {
-      loadQueue().catch(() => {})
-      loadTreasurySeed().catch(() => {})
-      loadSeedQueue().catch(() => {})
-    }, 30_000)
-    return () => clearInterval(interval)
-  }, [platform.isAdmin, loadQueue, loadTreasurySeed, loadSeedQueue])
+  useVisibleInterval(() => { loadDashboard().catch(() => {}) }, 30_000, platform.isAdmin)
 
   async function createMarket() {
     if (!question.trim()) {
@@ -210,8 +187,7 @@ export function AdminPage({ platform, onToast }: Props) {
       setDescription('')
       setCriteria('')
       await load({ trending: true, includePendingSeed: true })
-      await loadTreasurySeed()
-      await loadSeedQueue()
+      await loadDashboard()
       onToast('Market queued — treasury will seed on-chain before trading opens')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Failed to create market', 'error')
@@ -228,7 +204,7 @@ export function AdminPage({ platform, onToast }: Props) {
     setFulfillingId(w.id)
     try {
       await platform.fulfillWithdrawal(w.id, txRef.trim() || undefined)
-      await loadQueue()
+      await loadDashboard()
       await loadPending()
       onToast(`Marked ${fmtUct(w.amount)} withdrawal as sent`)
     } catch (e) {
@@ -315,7 +291,7 @@ export function AdminPage({ platform, onToast }: Props) {
             </p>
           </div>
           <button
-            onClick={() => loadQueue()}
+            onClick={() => loadDashboard()}
             disabled={queueLoading}
             className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
           >
@@ -418,7 +394,7 @@ export function AdminPage({ platform, onToast }: Props) {
             </p>
           </div>
           <button
-            onClick={() => loadSeedQueue()}
+            onClick={() => loadDashboard()}
             disabled={seedQueueLoading}
             className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
           >

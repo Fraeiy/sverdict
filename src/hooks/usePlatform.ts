@@ -66,6 +66,11 @@ export function usePlatform(identity: WalletIdentity | null) {
     return api.adminCloseMarket(auth, marketId)
   }, [auth])
 
+  const adminDashboard = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminDashboard(auth)
+  }, [auth])
+
   const withdrawalQueue = useCallback(async () => {
     if (!auth) throw new Error('Not connected')
     return api.adminWithdrawalQueue(auth)
@@ -92,6 +97,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     treasuryAddress,
     loading,
     isAdmin: !!user?.is_admin,
+    adminDashboard,
     treasurySeed,
     createMarket,
     resolveMarket,
@@ -105,6 +111,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     auth,
     treasuryAddress,
     loading,
+    adminDashboard,
     treasurySeed,
     createMarket,
     resolveMarket,

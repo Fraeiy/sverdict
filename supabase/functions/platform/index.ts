@@ -223,6 +223,67 @@ async function getTreasuryOnChainStatus(db: SupabaseClient) {
   return normalizeTreasuryStatusRow(data as Record<string, unknown> | null)
 }
 
+async function fetchWithdrawalQueue(db: SupabaseClient) {
+  const statuses = ['submitted', 'processing', 'completed', 'failed'] as const
+  const counts: Record<string, number> = {}
+  await Promise.all(statuses.map(async status => {
+    const { count } = await db.from('withdrawals').select('*', { count: 'exact', head: true }).eq('status', status)
+    counts[status] = count ?? 0
+  }))
+  const { data: recent } = await db.from('withdrawals')
+    .select('id, amount, status, created_at, completed_at, tx_reference, failure_reason, users(nametag, wallet_address)')
+    .order('created_at', { ascending: false })
+    .limit(25)
+  return { counts, recent: recent || [] }
+}
+
+async function fetchMarketSeedQueue(db: SupabaseClient) {
+  const statuses = ['pending', 'processing', 'completed', 'failed'] as const
+  const counts: Record<string, number> = {}
+  await Promise.all(statuses.map(async status => {
+    const { count } = await db.from('markets').select('*', { count: 'exact', head: true }).eq('seed_status', status)
+    counts[status] = count ?? 0
+  }))
+  const { data: recent } = await db.from('markets')
+    .select('id, question, seed_liquidity, seed_status, seed_tx_reference, seed_failure_reason, created_at, seed_completed_at')
+    .neq('seed_status', 'skipped')
+    .order('created_at', { ascending: false })
+    .limit(25)
+  return { counts, recent: recent || [] }
+}
+
+async function fetchTreasurySeedSummary(db: SupabaseClient) {
+  const treasury = await ensureTreasuryUser(db)
+  const { seedTotal } = marketSeedAmounts()
+  const onChain = await getTreasuryOnChainStatus(db)
+  const [pendingWithdrawals, pendingSeeds] = await Promise.all([
+    sumPendingWithdrawals(db),
+    sumPendingSeeds(db),
+  ])
+  const onChainBalance = Number(onChain?.on_chain_balance || 0)
+  const spendable = onChain
+    ? Number(onChain.spendable_after_reserves || 0)
+    : Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
+  const status = treasuryStatusMeta(onChain?.updated_at)
+  return {
+    treasuryUserId: treasury.id,
+    seedPerMarket: seedTotal,
+    onChainBalance,
+    uctTokenCount: Number(onChain?.uct_token_count || 0),
+    largestCoin: Number(onChain?.largest_coin_human || 0),
+    pendingWithdrawals,
+    pendingSeeds,
+    spendableAfterReserves: spendable,
+    canCreateMarket: seedTotal <= 0 || (status.statusUsable && spendable >= seedTotal),
+    statusUpdatedAt: onChain?.updated_at || null,
+    statusFresh: status.statusFresh,
+    statusUsable: status.statusUsable,
+    statusAgeMinutes: status.statusAgeMinutes,
+    workerHealth: status.workerHealth,
+    source: onChain ? 'treasury_status' : 'unknown',
+  }
+}
+
 function dmRecipientFromUser(user: { nametag?: string | null; wallet_address?: string | null } | null | undefined) {
   if (!user) return null
   const tag = String(user.nametag || '').trim().replace(/^@/, '')
@@ -676,36 +737,17 @@ Deno.serve(async (req) => {
     const admin = user.is_admin || isAdminWallet(walletAddress) || isAdminWallet(nametag)
     if (!admin) return json({ error: 'Admin access required' }, 403)
 
-    if (route === '/admin/treasury-seed') {
-      const treasury = await ensureTreasuryUser(db)
-      const { seedTotal } = marketSeedAmounts()
-      const onChain = await getTreasuryOnChainStatus(db)
-      const [pendingWithdrawals, pendingSeeds] = await Promise.all([
-        sumPendingWithdrawals(db),
-        sumPendingSeeds(db),
+    if (route === '/admin/dashboard') {
+      const [treasury, withdrawals, seeds] = await Promise.all([
+        fetchTreasurySeedSummary(db),
+        fetchWithdrawalQueue(db),
+        fetchMarketSeedQueue(db),
       ])
-      const onChainBalance = Number(onChain?.on_chain_balance || 0)
-      const spendable = onChain
-        ? Number(onChain.spendable_after_reserves || 0)
-        : Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
-      const status = treasuryStatusMeta(onChain?.updated_at)
-      return json({
-        treasuryUserId: treasury.id,
-        seedPerMarket: seedTotal,
-        onChainBalance,
-        uctTokenCount: Number(onChain?.uct_token_count || 0),
-        largestCoin: Number(onChain?.largest_coin_human || 0),
-        pendingWithdrawals,
-        pendingSeeds,
-        spendableAfterReserves: spendable,
-        canCreateMarket: seedTotal <= 0 || (status.statusUsable && spendable >= seedTotal),
-        statusUpdatedAt: onChain?.updated_at || null,
-        statusFresh: status.statusFresh,
-        statusUsable: status.statusUsable,
-        statusAgeMinutes: status.statusAgeMinutes,
-        workerHealth: status.workerHealth,
-        source: onChain ? 'treasury_status' : 'unknown',
-      })
+      return json({ treasury, withdrawals, seeds })
+    }
+
+    if (route === '/admin/treasury-seed') {
+      return json(await fetchTreasurySeedSummary(db))
     }
 
     if (route === '/admin/markets' && req.method === 'POST') {
@@ -869,32 +911,11 @@ Deno.serve(async (req) => {
     }
 
     if (route === '/admin/market-seeds/queue') {
-      const statuses = ['pending', 'processing', 'completed', 'failed'] as const
-      const counts: Record<string, number> = {}
-      await Promise.all(statuses.map(async status => {
-        const { count } = await db.from('markets').select('*', { count: 'exact', head: true }).eq('seed_status', status)
-        counts[status] = count ?? 0
-      }))
-      const { data: recent } = await db.from('markets')
-        .select('id, question, seed_liquidity, seed_status, seed_tx_reference, seed_failure_reason, created_at, seed_completed_at')
-        .neq('seed_status', 'skipped')
-        .order('created_at', { ascending: false })
-        .limit(25)
-      return json({ counts, recent: recent || [] })
+      return json(await fetchMarketSeedQueue(db))
     }
 
     if (route === '/admin/withdrawals/queue') {
-      const statuses = ['submitted', 'processing', 'completed', 'failed'] as const
-      const counts: Record<string, number> = {}
-      await Promise.all(statuses.map(async status => {
-        const { count } = await db.from('withdrawals').select('*', { count: 'exact', head: true }).eq('status', status)
-        counts[status] = count ?? 0
-      }))
-      const { data: recent } = await db.from('withdrawals')
-        .select('id, amount, status, created_at, completed_at, tx_reference, failure_reason, users(nametag, wallet_address)')
-        .order('created_at', { ascending: false })
-        .limit(25)
-      return json({ counts, recent: recent || [] })
+      return json(await fetchWithdrawalQueue(db))
     }
 
     if (route === '/admin/withdrawals/pending') {

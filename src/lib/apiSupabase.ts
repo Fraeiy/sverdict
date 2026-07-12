@@ -150,24 +150,58 @@ export async function placeTrade(
   })
 }
 
-export async function adminTreasurySeed(auth: AuthHeaders) {
+export type AdminTreasurySummary = {
+  treasuryUserId: string
+  seedPerMarket: number
+  onChainBalance: number
+  uctTokenCount: number
+  largestCoin: number
+  pendingWithdrawals: number
+  pendingSeeds: number
+  spendableAfterReserves: number
+  canCreateMarket: boolean
+  statusUpdatedAt: string | null
+  statusFresh: boolean
+  statusUsable: boolean
+  statusAgeMinutes: number | null
+  workerHealth: 'ok' | 'delayed' | 'stale' | 'unknown'
+  source: string
+}
+
+export async function adminDashboard(auth: AuthHeaders) {
   return invoke<{
-    treasuryUserId: string
-    seedPerMarket: number
-    onChainBalance: number
-    uctTokenCount: number
-    largestCoin: number
-    pendingWithdrawals: number
-    pendingSeeds: number
-    spendableAfterReserves: number
-    canCreateMarket: boolean
-    statusUpdatedAt: string | null
-    statusFresh: boolean
-    statusUsable: boolean
-    statusAgeMinutes: number | null
-    workerHealth: 'ok' | 'delayed' | 'stale' | 'unknown'
-    source: string
-  }>('/admin/treasury-seed', { auth })
+    treasury: AdminTreasurySummary
+    withdrawals: {
+      counts: Record<string, number>
+      recent: Array<{
+        id: string
+        amount: number
+        status: string
+        created_at: string
+        completed_at?: string | null
+        tx_reference?: string | null
+        failure_reason?: string | null
+        users?: { nametag?: string | null; wallet_address?: string }
+      }>
+    }
+    seeds: {
+      counts: Record<string, number>
+      recent: Array<{
+        id: string
+        question: string
+        seed_liquidity: number
+        seed_status: string
+        seed_tx_reference?: string | null
+        seed_failure_reason?: string | null
+        created_at: string
+        seed_completed_at?: string | null
+      }>
+    }
+  }>('/admin/dashboard', { auth })
+}
+
+export async function adminTreasurySeed(auth: AuthHeaders) {
+  return invoke<AdminTreasurySummary>('/admin/treasury-seed', { auth })
 }
 
 export async function adminMarketSeedQueue(auth: AuthHeaders) {

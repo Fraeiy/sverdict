@@ -21,14 +21,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { normalizeRecipient, rawToHuman } from './lib/constants.mjs'
-import { buildWithdrawMemo } from './lib/paymentMemos.mjs'
+import { buildSeedMemo, buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
 import { consolidateTreasuryCoins } from './lib/treasuryConsolidate.mjs'
 import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInventory.mjs'
 import { publishTreasuryStatus } from './lib/treasuryStatus.mjs'
 import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
-import { buildSeedMemo } from './lib/paymentMemos.mjs'
 import { getUctDecimals, initTreasurySphere, isUctAsset, resolveUctCoinId } from './lib/sphereProviders.mjs'
 
 loadProjectEnv()
@@ -189,18 +188,6 @@ function countRecipientDeliveries(result) {
   }
   const tokens = result?.tokens
   return Array.isArray(tokens) ? tokens.length : 1
-}
-
-/** Re-queue withdrawals that failed due to the resolved UCT coinId / toLowerCase bug. */
-async function recoverBugFailedWithdrawals(db) {
-  const { data } = await db.from('withdrawals')
-    .update({ status: 'submitted', failure_reason: null, processing_at: null })
-    .eq('status', 'failed')
-    .or('failure_reason.ilike.%toLowerCase%,failure_reason.ilike.%coinId%')
-    .select('id, amount')
-  if (data?.length) {
-    console.log(`[treasury-agent] requeued ${data.length} withdrawal(s) after coinId fix`)
-  }
 }
 
 async function resetStaleProcessing(db) {
@@ -644,7 +631,6 @@ async function runOnce() {
   }
 
   const sphere = await prepareTreasurySphere(await initSphere())
-  await recoverBugFailedWithdrawals(db)
   await consolidateTreasuryCoins(sphere)
   const seeds = await processMarketSeeds(db, sphere)
   const n = await processWithdrawals(db, sphere)

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/layout/AppShell'
 import { ConnectScreen } from './components/layout/ConnectScreen'
@@ -6,12 +6,21 @@ import { Toast } from './components/ui/Toast'
 import { useNotifications } from './hooks/useNotifications'
 import { usePlatform } from './hooks/usePlatform'
 import { useSphereConnect } from './hooks/useSphereConnect'
-import { AdminPage } from './pages/AdminPage'
 import { HomePage } from './pages/HomePage'
-import { MarketDetailPage } from './pages/MarketDetailPage'
-import { PortfolioPage } from './pages/PortfolioPage'
-import { SettingsPage } from './pages/SettingsPage'
 import { isMisconfiguredProduction } from './lib/config'
+
+const AdminPage = lazy(() => import('./pages/AdminPage').then(m => ({ default: m.AdminPage })))
+const MarketDetailPage = lazy(() => import('./pages/MarketDetailPage').then(m => ({ default: m.MarketDetailPage })))
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center font-data text-sm text-[var(--color-muted)]">
+      Loading…
+    </div>
+  )
+}
 
 export default function App() {
   const wallet = useSphereConnect()
@@ -71,34 +80,46 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route
             path="markets/:id"
-            element={<MarketDetailPage identity={wallet.identity} onToast={showToast} />}
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <MarketDetailPage identity={wallet.identity} onToast={showToast} />
+              </Suspense>
+            }
           />
           <Route
             path="portfolio"
             element={
-              <PortfolioPage
-                identity={wallet.identity}
-                wallet={wallet}
-                onToast={showToast}
-              />
+              <Suspense fallback={<PageFallback />}>
+                <PortfolioPage
+                  identity={wallet.identity}
+                  wallet={wallet}
+                  onToast={showToast}
+                />
+              </Suspense>
             }
           />
           <Route
             path="admin"
             element={
               platform.isAdmin
-                ? <AdminPage platform={platform} onToast={showToast} />
+                ? (
+                  <Suspense fallback={<PageFallback />}>
+                    <AdminPage platform={platform} onToast={showToast} />
+                  </Suspense>
+                )
                 : <Navigate to="/" replace />
             }
           />
           <Route
             path="settings"
             element={
-              <SettingsPage
-                identity={wallet.identity}
-                onDisconnect={wallet.disconnect}
-                onToast={showToast}
-              />
+              <Suspense fallback={<PageFallback />}>
+                <SettingsPage
+                  identity={wallet.identity}
+                  onDisconnect={wallet.disconnect}
+                  onToast={showToast}
+                />
+              </Suspense>
             }
           />
         </Route>

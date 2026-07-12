@@ -3,6 +3,7 @@ import * as api from '../lib/api'
 import { authFromIdentity } from '../lib/auth'
 import { getBackendMode } from '../lib/config'
 import type { AppNotification, WalletIdentity } from '../lib/types'
+import { useVisibleInterval } from './useVisibleInterval'
 
 const POLL_MS = 30_000
 
@@ -37,23 +38,11 @@ export function useNotifications(identity: WalletIdentity | null) {
     refresh().catch(() => setLoading(false))
   }, [refresh])
 
-  useEffect(() => {
-    if (!auth || getBackendMode() !== 'supabase') return
-
-    const interval = setInterval(() => {
-      refresh().catch(() => {})
-    }, POLL_MS)
-
-    function onVisible() {
-      if (document.visibilityState === 'visible') refresh().catch(() => {})
-    }
-    document.addEventListener('visibilitychange', onVisible)
-
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [auth, refresh])
+  useVisibleInterval(
+    () => { refresh().catch(() => {}) },
+    POLL_MS,
+    !!auth && getBackendMode() === 'supabase',
+  )
 
   const markAllRead = useCallback(async () => {
     if (!auth) return

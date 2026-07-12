@@ -90,24 +90,34 @@ export async function placeTrade(
   })
 }
 
-export async function adminTreasurySeed(_auth: AuthHeaders) {
+const REST_TREASURY_STUB = {
+  treasuryUserId: '',
+  seedPerMarket: 100,
+  onChainBalance: 0,
+  uctTokenCount: 0,
+  largestCoin: 0,
+  pendingWithdrawals: 0,
+  pendingSeeds: 0,
+  spendableAfterReserves: 0,
+  canCreateMarket: false,
+  statusUpdatedAt: null,
+  statusFresh: false,
+  statusUsable: false,
+  statusAgeMinutes: null,
+  workerHealth: 'unknown' as const,
+  source: 'rest',
+}
+
+export async function adminDashboard(_auth: AuthHeaders) {
   return {
-    treasuryUserId: '',
-    seedPerMarket: 100,
-    onChainBalance: 0,
-    uctTokenCount: 0,
-    largestCoin: 0,
-    pendingWithdrawals: 0,
-    pendingSeeds: 0,
-    spendableAfterReserves: 0,
-    canCreateMarket: false,
-    statusUpdatedAt: null,
-    statusFresh: false,
-    statusUsable: false,
-    statusAgeMinutes: null,
-    workerHealth: 'unknown' as const,
-    source: 'rest',
+    treasury: REST_TREASURY_STUB,
+    withdrawals: { counts: { submitted: 0, processing: 0, completed: 0, failed: 0 }, recent: [] },
+    seeds: { counts: {}, recent: [] },
   }
+}
+
+export async function adminTreasurySeed(_auth: AuthHeaders) {
+  return REST_TREASURY_STUB
 }
 
 export async function adminMarketSeedQueue(_auth: AuthHeaders) {

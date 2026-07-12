@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as api from '../lib/api'
 import { authFromIdentity } from '../lib/auth'
 import type { Portfolio, WalletIdentity } from '../lib/types'
+import { useVisibleInterval } from './useVisibleInterval'
 
 export function usePositions(identity: WalletIdentity | null) {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
@@ -33,11 +34,7 @@ export function usePositions(identity: WalletIdentity | null) {
     refresh().catch(() => {})
   }, [refresh])
 
-  useEffect(() => {
-    if (!auth) return
-    const interval = setInterval(() => refresh().catch(() => {}), 15000)
-    return () => clearInterval(interval)
-  }, [auth, refresh])
+  useVisibleInterval(() => { refresh().catch(() => {}) }, 15_000, !!auth)
 
   const deposit = useCallback(async (amount: number, txReference?: string, paymentMemo?: string) => {
     if (!auth) throw new Error('Connect your Sphere wallet')

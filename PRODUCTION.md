@@ -77,7 +77,7 @@ Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loo
 
 **GitHub schedule is not real-time.** Cron triggers are *best-effort* — this repo sees **60–120+ minute** gaps between scheduled runs. Each run performs **one treasury pass** (consolidate → seeds → withdrawals → DMs → publish status). Use **external cron** (`npm run treasury:trigger` every 10 min) for reliable timing.
 
-**If Actions shows red X at ~10m:** the job hit its timeout (older workflows used an 8-min loop that exceeded 10m). Current workflow uses a single pass with a 15m timeout.
+**If Actions shows red X at ~20m:** the job hit its timeout. Current workflow uses a single pass with a 20m timeout.
 
 Check last worker activity: Supabase `treasury_status.updated_at` or Admin → on-chain treasury timestamp.
 
@@ -89,6 +89,7 @@ Check last worker activity: Supabase `treasury_status.updated_at` or Admin → o
 | `SUPABASE_URL` | Yes | Same as `VITE_SUPABASE_URL` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase Dashboard → Settings → API |
 | `SPHERE_ORACLE_API_KEY` | No | Testnet2 gateway key if needed |
+| `TREASURY_TRIGGER_PAT` | No | Same as `GITHUB_PAT` — enables `treasury-dispatch-cron` workflow |
 
 Enable Actions on the repo, then run **Treasury Agent → Run workflow** once to test.
 
@@ -119,6 +120,8 @@ Use one of:
      Headers: `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`  
      Body: `{"event_type":"treasury-tick"}`
    - Or locally / VPS: `GITHUB_PAT=ghp_... npm run treasury:trigger`
+   - **Windows:** add `GITHUB_PAT` to `.env`, then `npm run treasury:schedule-install` (Task Scheduler every 10 min)
+   - **GitHub backup:** add `TREASURY_TRIGGER_PAT` secret — `.github/workflows/treasury-dispatch-cron.yml` pings every 10 min
 3. **Always-on loop** — small VPS: `npm run treasury:worker:loop` (polls every 60s)
 
 Admin UI shows **Treasury worker → last on-chain publish** from `treasury_status.updated_at`.
