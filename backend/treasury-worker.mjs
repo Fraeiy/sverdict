@@ -29,7 +29,7 @@ import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInve
 import { publishTreasuryStatus } from './lib/treasuryStatus.mjs'
 import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
 import { buildSeedMemo } from './lib/paymentMemos.mjs'
-import { getUctCoinId, getUctDecimals, initTreasurySphere } from './lib/sphereProviders.mjs'
+import { getUctDecimals, initTreasurySphere, isUctAsset, resolveUctCoinId } from './lib/sphereProviders.mjs'
 
 loadProjectEnv()
 
@@ -42,7 +42,7 @@ const MAX_PER_RUN = Number(process.env.MAX_PER_RUN || 5)
 const MAX_SEEDS_PER_RUN = Number(process.env.MAX_SEEDS_PER_RUN || 3)
 const STALE_MINUTES = Number(process.env.STALE_PROCESSING_MINUTES || 10)
 const MARKET_SEED_LIQUIDITY_UCT = Number(process.env.MARKET_SEED_LIQUIDITY_UCT || 100)
-const UCT_COIN_ID = getUctCoinId()
+let treasuryUctCoinId = resolveUctCoinId()
 
 function requireEnv(name) {
   const v = process.env[name]
@@ -87,9 +87,7 @@ let treasuryUctDecimals = getUctDecimals()
 
 async function getUctBalance(sphere) {
   const assets = await sphere.payments.getAssets()
-  const uct = (assets || []).find(a =>
-    a.symbol === 'UCT' || a.coinId?.toLowerCase() === UCT_COIN_ID.toLowerCase(),
-  )
+  const uct = (assets || []).find(a => isUctAsset(a, treasuryUctCoinId))
   const decimals = treasuryUctDecimals
   const rawStr = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
   const raw = BigInt(String(rawStr || 0))
@@ -133,7 +131,8 @@ async function prepareTreasurySphere(sphere) {
   }
 
   treasuryUctDecimals = getUctDecimals()
-  console.log(`[treasury-agent] UCT decimals (TokenRegistry): ${treasuryUctDecimals}`)
+  treasuryUctCoinId = resolveUctCoinId()
+  console.log(`[treasury-agent] UCT coinId=${treasuryUctCoinId} decimals=${treasuryUctDecimals}`)
 
   let bal = await getUctBalance(sphere).catch(e => {
     console.warn('[treasury-agent] getAssets failed:', e instanceof Error ? e.message : e)
@@ -190,6 +189,18 @@ function countRecipientDeliveries(result) {
   }
   const tokens = result?.tokens
   return Array.isArray(tokens) ? tokens.length : 1
+}
+
+/** Re-queue withdrawals that failed due to the resolved UCT coinId / toLowerCase bug. */
+async function recoverBugFailedWithdrawals(db) {
+  const { data } = await db.from('withdrawals')
+    .update({ status: 'submitted', failure_reason: null, processing_at: null })
+    .eq('status', 'failed')
+    .or('failure_reason.ilike.%toLowerCase%,failure_reason.ilike.%coinId%')
+    .select('id, amount')
+  if (data?.length) {
+    console.log(`[treasury-agent] requeued ${data.length} withdrawal(s) after coinId fix`)
+  }
 }
 
 async function resetStaleProcessing(db) {
@@ -633,6 +644,7 @@ async function runOnce() {
   }
 
   const sphere = await prepareTreasurySphere(await initSphere())
+  await recoverBugFailedWithdrawals(db)
   await consolidateTreasuryCoins(sphere)
   const seeds = await processMarketSeeds(db, sphere)
   const n = await processWithdrawals(db, sphere)

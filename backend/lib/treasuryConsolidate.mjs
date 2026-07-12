@@ -1,8 +1,10 @@
 import { formatWithdrawalAmount } from './withdrawAmount.mjs'
 import { summarizeUctInventory } from './treasuryInventory.mjs'
 
-const DEFAULT_MIN_COINS = Number(process.env.TREASURY_CONSOLIDATE_MIN_COINS || 4)
-const DEFAULT_MAX_OPS = Number(process.env.TREASURY_CONSOLIDATE_MAX_OPS || 2)
+// Off by default — self-transfers show noisy float lines in Sphere wallet.
+// Set TREASURY_CONSOLIDATE_MIN_COINS=4 to enable when fragmentation is a problem.
+const DEFAULT_MIN_COINS = Number(process.env.TREASURY_CONSOLIDATE_MIN_COINS || 100)
+const DEFAULT_MAX_OPS = Number(process.env.TREASURY_CONSOLIDATE_MAX_OPS || 1)
 
 function treasuryRecipient(sphere) {
   const tag = (sphere.identity?.nametag || process.env.TREASURY_NAMETAG || 'sphere-predict')

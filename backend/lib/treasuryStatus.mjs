@@ -1,7 +1,7 @@
 import { rawToHuman } from './amount.mjs'
 import { formatWithdrawalAmount } from './withdrawAmount.mjs'
 import { summarizeUctInventory } from './treasuryInventory.mjs'
-import { getUctCoinId, getUctDecimals } from './sphereProviders.mjs'
+import { getUctDecimals, isUctAsset, resolveUctCoinId } from './sphereProviders.mjs'
 import { humanFromRawMaybeMistaken, resolveUctDecimals, roundLedgerUct } from './uctAmount.mjs'
 
 export async function sumPendingWithdrawals(db) {
@@ -28,10 +28,8 @@ async function readOnChainTotals(sphere, decimals) {
 
   try {
     const assets = await sphere.payments.getAssets()
-    const coinId = getUctCoinId()
-    const uct = (assets || []).find(a =>
-      a.symbol === 'UCT' || String(a.coinId || '').toLowerCase() === String(coinId).toLowerCase(),
-    )
+    const coinId = resolveUctCoinId()
+    const uct = (assets || []).find(a => isUctAsset(a, coinId))
     if (uct) {
       const raw = BigInt(String(uct.totalAmount ?? uct.balance ?? uct.amount ?? 0))
       if (raw > 0n) {

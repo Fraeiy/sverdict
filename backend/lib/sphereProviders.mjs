@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { Sphere, TokenRegistry } from '@unicitylabs/sphere-sdk'
 import { createNodeProviders } from '@unicitylabs/sphere-sdk/impl/nodejs'
 import { createWalletApiProviders } from '@unicitylabs/sphere-sdk/impl/shared/wallet-api'
+import { UCT_COIN_ID as UCT_COIN_ID_FALLBACK } from './constants.mjs'
 import {
   sphereDataDirs,
   sphereNetwork,
@@ -62,8 +63,23 @@ export function getUctDecimals() {
   return Number(uct?.decimals ?? 8)
 }
 
-export function getUctCoinId() {
+/** TokenRegistry may be empty until Sphere network is initialized — always fall back. */
+export function resolveUctCoinId() {
   return TokenRegistry.getInstance().getCoinIdBySymbol('UCT')
+    || process.env.UCT_COIN_ID
+    || UCT_COIN_ID_FALLBACK
+}
+
+export function getUctCoinId() {
+  return resolveUctCoinId()
+}
+
+export function isUctAsset(asset, coinId = resolveUctCoinId()) {
+  if (!asset) return false
+  if (asset.symbol === 'UCT') return true
+  const expected = String(coinId || '').trim().toLowerCase()
+  if (!expected) return false
+  return String(asset.coinId || '').trim().toLowerCase() === expected
 }
 
 export async function initTreasurySphere({ mnemonic, autoGenerate = false } = {}) {
