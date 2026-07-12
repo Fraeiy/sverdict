@@ -255,7 +255,7 @@ export function AdminPage({ platform, onToast }: Props) {
           <div>
             <h2 className="text-lg font-semibold">Treasury withdrawal queue</h2>
             <p className="mt-1 text-sm text-[var(--color-text-2)]">
-              GitHub Actions runs the treasury agent every 5 minutes. No manual action needed unless the agent fails.
+              GitHub Actions triggers the treasury agent on a schedule (best-effort — often 10–60 min apart). Each run performs multiple passes. Use Run workflow if urgent.
             </p>
           </div>
           <button

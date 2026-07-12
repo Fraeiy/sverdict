@@ -1,25 +1,39 @@
-# Autonomous treasury agent — processes withdrawal queue on testnet2 (v2 wallet-api).
+# Autonomous treasury agent — processes withdrawal + market-seed queues on testnet2.
 # Secrets: TREASURY_MNEMONIC, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 # Optional: SPHERE_ORACLE_API_KEY, TREASURY_DEVICE_ID (else persisted in .treasury-data cache)
+#
+# GitHub schedule is BEST-EFFORT — runs are often delayed 15–60+ minutes under load.
+# This workflow runs multiple treasury passes per trigger (see treasury-ci-loop.mjs).
+# For mainnet: also trigger via workflow_dispatch (manual) or repository_dispatch (external cron).
 
 name: Treasury Agent
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Staggered UTC minutes — avoids top-of-hour pile-ups; still best-effort on GitHub's side.
+    - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types: [treasury-tick]
+
+concurrency:
+  group: treasury-agent
+  cancel-in-progress: true
 
 jobs:
   fulfill-withdrawals:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
+
       - run: npm ci
+
       - name: Restore treasury wallet cache
         uses: actions/cache@v4
         with:
@@ -28,14 +42,27 @@ jobs:
             .treasury-tokens
           key: treasury-sphere-${{ runner.os }}-v1
           restore-keys: treasury-sphere-${{ runner.os }}-
-      - name: Show commit (verify latest code)
-        run: git rev-parse HEAD && head -n 80 backend/treasury-worker.mjs | tail -n 20
-      - name: Run treasury worker
+
+      - name: Log schedule metadata
+        run: |
+          echo "Run started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Event: ${{ github.event_name }}"
+          echo "Commit: $(git rev-parse HEAD)"
+
+      - name: Run treasury loop (multiple passes per trigger)
         env:
           TREASURY_MNEMONIC: ${{ secrets.TREASURY_MNEMONIC }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
-        run: |
-          npm run treasury:worker
-          npm run dm:worker
+          TREASURY_CI_LOOP_MS: 480000
+          TREASURY_POLL_MS: 60000
+        run: node backend/scripts/treasury-ci-loop.mjs
+
+      - name: Process DM queue
+        env:
+          TREASURY_MNEMONIC: ${{ secrets.TREASURY_MNEMONIC }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
+        run: npm run dm:worker

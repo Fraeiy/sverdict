@@ -73,7 +73,11 @@ Copy `.env.production.example` → `.env.production.local` for local production 
 
 Withdrawals are queued in Postgres. The **treasury agent** sends UCT on Sphere testnet2. The **DM worker** delivers queued Sphere messages (win + withdrawal notifications).
 
-Both run from `.github/workflows/treasury-agent.yml` every 5 minutes (treasury first, then DMs).
+Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loop first, then DMs).
+
+**GitHub schedule is not real-time.** Cron triggers are *best-effort* — many repos see 15–60+ minute gaps between runs even when the workflow says `*/5`. This is a known GitHub Actions limitation (not a bug in sphere-predict). Each triggered run now performs **~8 treasury passes** over 8 minutes (`treasury-ci-loop.mjs`), so one delayed trigger still clears multiple queue items.
+
+Check last worker activity: Supabase `treasury_status.updated_at` or Admin → on-chain treasury timestamp.
 
 ### GitHub Actions secrets
 
@@ -98,6 +102,16 @@ npm run treasury:worker:loop      # poll every 60s
 npm run dm:worker                 # process DM queue
 npm run dm:worker:dry-run
 ```
+
+### Faster triggers for mainnet (optional)
+
+If ~50 min gaps are unacceptable, use one of:
+
+1. **Manual** — GitHub → Actions → Treasury Agent → **Run workflow**
+2. **External cron** — e.g. [cron-job.org](https://cron-job.org) every 5 min POST to:
+   `https://api.github.com/repos/Fraeiy/sphere-predict/dispatches`
+   with body `{"event_type":"treasury-tick"}` and header `Authorization: Bearer <PAT with repo scope>`
+3. **Always-on loop** — small VPS: `npm run treasury:worker:loop` (polls every 60s)
 
 ### Test before going live
 
@@ -154,5 +168,6 @@ The treasury worker logs `used N source token(s)` when this happens. If the tota
 | "Production setup incomplete" on Vercel | Set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` |
 | Settings/notifications 404 | `npm run supabase:deploy` |
 | Wallet history empty / RPC error | `npm run supabase:push` (migration 004+) |
-| Withdrawals stuck in `submitted` | Check GitHub Actions secrets + treasury balance |
+| Withdrawals stuck in `submitted` | Check GitHub Actions secrets + treasury balance; verify `treasury_status.updated_at` is recent |
+| Treasury agent runs ~50+ min apart | Normal GitHub schedule delay — use Run workflow, external cron, or `treasury:worker:loop` on a VPS |
 | DMs not arriving | Confirm user prefs (`dmOnWin` / `dmOnWithdrawal`); run `dm:worker` |
