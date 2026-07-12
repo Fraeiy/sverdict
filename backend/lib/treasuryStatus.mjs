@@ -1,5 +1,8 @@
+import { rawToHuman } from './amount.mjs'
 import { formatWithdrawalAmount } from './withdrawAmount.mjs'
 import { summarizeUctInventory } from './treasuryInventory.mjs'
+import { getUctCoinId, getUctDecimals } from './sphereProviders.mjs'
+import { humanFromRawMaybeMistaken, resolveUctDecimals, roundLedgerUct } from './uctAmount.mjs'
 
 export async function sumPendingWithdrawals(db) {
   const { data, error } = await db.from('withdrawals')
@@ -17,26 +20,59 @@ export async function sumPendingSeeds(db) {
   return (data || []).reduce((sum, row) => sum + Number(row.seed_liquidity || 0), 0)
 }
 
+async function readOnChainTotals(sphere, decimals) {
+  const inventory = summarizeUctInventory(sphere, decimals)
+  let totalRaw = inventory.totalRaw
+  let totalHuman = inventory.totalHuman
+  let largestHuman = inventory.largestHuman
+
+  try {
+    const assets = await sphere.payments.getAssets()
+    const coinId = getUctCoinId()
+    const uct = (assets || []).find(a =>
+      a.symbol === 'UCT' || String(a.coinId || '').toLowerCase() === String(coinId).toLowerCase(),
+    )
+    if (uct) {
+      const raw = BigInt(String(uct.totalAmount ?? uct.balance ?? uct.amount ?? 0))
+      if (raw > 0n) {
+        totalRaw = raw
+        totalHuman = rawToHuman(raw, decimals)
+      }
+    }
+  } catch { /* inventory sum is fallback */ }
+
+  totalHuman = humanFromRawMaybeMistaken(totalHuman, totalRaw, decimals)
+  largestHuman = humanFromRawMaybeMistaken(largestHuman, inventory.largestRaw, decimals)
+
+  return {
+    totalRaw,
+    totalHuman: roundLedgerUct(totalHuman),
+    largestHuman: roundLedgerUct(largestHuman),
+    tokenCount: inventory.tokenCount,
+  }
+}
+
 export async function publishTreasuryStatus(db, sphere, { updatedBy = 'treasury-worker' } = {}) {
   const [pendingWithdrawals, pendingSeeds] = await Promise.all([
     sumPendingWithdrawals(db),
     sumPendingSeeds(db),
   ])
 
+  const decimals = resolveUctDecimals(getUctDecimals())
   let onChainBalance = 0
   let onChainRaw = '0'
   let uctTokenCount = 0
   let largestCoinHuman = 0
 
   if (sphere) {
-    const inventory = summarizeUctInventory(sphere)
-    onChainBalance = inventory.totalHuman
-    onChainRaw = String(inventory.totalRaw)
-    uctTokenCount = inventory.tokenCount
-    largestCoinHuman = inventory.largestHuman
+    const totals = await readOnChainTotals(sphere, decimals)
+    onChainBalance = totals.totalHuman
+    onChainRaw = String(totals.totalRaw)
+    uctTokenCount = totals.tokenCount
+    largestCoinHuman = totals.largestHuman
   }
 
-  const spendableAfterReserves = Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
+  const spendableAfterReserves = roundLedgerUct(Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds))
   const row = {
     id: 1,
     on_chain_balance: onChainBalance,
@@ -55,7 +91,8 @@ export async function publishTreasuryStatus(db, sphere, { updatedBy = 'treasury-
 
   console.log(
     `[treasury-agent] status — on-chain ${formatWithdrawalAmount(onChainBalance)} UCT `
-    + `(${uctTokenCount} coin(s), largest ${formatWithdrawalAmount(largestCoinHuman)}), `
+    + `(raw=${onChainRaw}, decimals=${decimals}, ${uctTokenCount} coin(s), `
+    + `largest ${formatWithdrawalAmount(largestCoinHuman)}), `
     + `reserved wd=${formatWithdrawalAmount(pendingWithdrawals)} seed=${formatWithdrawalAmount(pendingSeeds)}, `
     + `spendable ${formatWithdrawalAmount(spendableAfterReserves)}`,
   )

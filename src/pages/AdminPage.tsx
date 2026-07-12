@@ -481,7 +481,12 @@ export function AdminPage({ platform, onToast }: Props) {
             </p>
             <p>
               Spendable after reserves: <span className="font-bold">{fmtUct(spendableBalance ?? 0)}</span>
-              {!treasuryStatusFresh && <> — treasury status stale; wait for GitHub Actions worker</>}
+              {!treasuryStatusFresh && workerHealth !== 'stale' && (
+                <> — last worker report is older than 90m (normal with GitHub schedule)</>
+              )}
+              {workerHealth === 'stale' && (
+                <> — treasury status very stale; run GitHub Actions Treasury Agent</>
+              )}
               {treasuryStatusFresh && (spendableBalance ?? 0) < seedPerMarket && (
                 <> — need at least {fmtUct(seedPerMarket)} free on-chain</>
               )}

@@ -1,35 +1,37 @@
-import { DEFAULT_UCT_DECIMALS, rawToHuman } from './amount.mjs'
-import { getUctCoinId } from './sphereProviders.mjs'
+import { rawToHuman } from './amount.mjs'
+import { resolveUctDecimals } from './uctAmount.mjs'
+import { getUctCoinId, getUctDecimals } from './sphereProviders.mjs'
 
 /**
  * List spendable UCT token sizes in the treasury wallet.
  * Sphere sends one mailbox delivery per source token used — fragmented
  * treasury inventory causes multiple "Received" lines for one withdrawal.
  */
-export function listSpendableUctTokens(sphere, coinId = getUctCoinId()) {
+export function listSpendableUctTokens(sphere, coinId = getUctCoinId(), decimals = resolveUctDecimals(getUctDecimals())) {
   const tokens = sphere.payments.getTokens?.({ coinId }) || []
   const sizes = []
   for (const t of tokens) {
     if (!t || t.status === 'spent' || t.status === 'invalid' || t.status === 'transferring') continue
     const raw = BigInt(String(t.amount || 0))
     if (raw <= 0n) continue
-    sizes.push({ id: t.id, raw, human: rawToHuman(raw, DEFAULT_UCT_DECIMALS) })
+    sizes.push({ id: t.id, raw, human: rawToHuman(raw, decimals) })
   }
   sizes.sort((a, b) => (a.raw < b.raw ? -1 : a.raw > b.raw ? 1 : 0))
   return sizes
 }
 
-export function summarizeUctInventory(sphere) {
-  const tokens = listSpendableUctTokens(sphere)
+export function summarizeUctInventory(sphere, decimals = resolveUctDecimals(getUctDecimals())) {
+  const tokens = listSpendableUctTokens(sphere, getUctCoinId(), decimals)
   const totalRaw = tokens.reduce((sum, t) => sum + t.raw, 0n)
   const largest = tokens.length ? tokens[tokens.length - 1] : null
   return {
     tokenCount: tokens.length,
     totalRaw,
-    totalHuman: rawToHuman(totalRaw, DEFAULT_UCT_DECIMALS),
+    totalHuman: rawToHuman(totalRaw, decimals),
     largestRaw: largest?.raw ?? 0n,
     largestHuman: largest?.human ?? 0,
     tokens,
+    decimals,
   }
 }
 

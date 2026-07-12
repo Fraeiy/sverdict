@@ -49,8 +49,8 @@ export type WorkerHealth = 'ok' | 'delayed' | 'stale' | 'unknown'
 /** Treasury worker freshness from last treasury_status publish. */
 export function workerHealthFromAge(ageMs: number | null): WorkerHealth {
   if (ageMs == null || !Number.isFinite(ageMs)) return 'unknown'
-  if (ageMs < 20 * 60_000) return 'ok'
-  if (ageMs < 120 * 60_000) return 'delayed'
+  if (ageMs < 90 * 60_000) return 'ok'
+  if (ageMs < 6 * 60 * 60_000) return 'delayed'
   return 'stale'
 }
 

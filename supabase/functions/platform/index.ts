@@ -7,12 +7,13 @@ import {
   buildStakeMemo,
   buildWithdrawMemo,
 } from './paymentMemos.ts'
+import { normalizeTreasuryStatusRow } from './treasuryAmount.ts'
 
 const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
 
 /** GitHub schedule is best-effort — real gaps are often 60–120+ min between runs. */
-const WORKER_FRESH_MS = 20 * 60_000
-const WORKER_USABLE_MS = 180 * 60_000
+const WORKER_FRESH_MS = 90 * 60_000
+const WORKER_USABLE_MS = 6 * 60 * 60_000
 
 function treasuryStatusMeta(updatedAt: string | null | undefined) {
   const statusAgeMs = updatedAt ? Date.now() - new Date(String(updatedAt)).getTime() : null
@@ -22,7 +23,7 @@ function treasuryStatusMeta(updatedAt: string | null | undefined) {
     ? 'unknown'
     : statusAgeMs < WORKER_FRESH_MS
       ? 'ok'
-      : statusAgeMs < 120 * 60_000
+      : statusAgeMs < WORKER_USABLE_MS
         ? 'delayed'
         : 'stale'
   return {
@@ -219,7 +220,7 @@ async function sumPendingSeeds(db: SupabaseClient) {
 
 async function getTreasuryOnChainStatus(db: SupabaseClient) {
   const { data } = await db.from('treasury_status').select('*').eq('id', 1).maybeSingle()
-  return data
+  return normalizeTreasuryStatusRow(data as Record<string, unknown> | null)
 }
 
 function dmRecipientFromUser(user: { nametag?: string | null; wallet_address?: string | null } | null | undefined) {
