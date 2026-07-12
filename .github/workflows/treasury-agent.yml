@@ -2,15 +2,14 @@
 # Secrets: TREASURY_MNEMONIC, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 # Optional: SPHERE_ORACLE_API_KEY, TREASURY_DEVICE_ID (else persisted in .treasury-data cache)
 #
-# GitHub schedule is BEST-EFFORT — runs are often delayed 15–60+ minutes under load.
-# This workflow runs multiple treasury passes per trigger (see treasury-ci-loop.mjs).
-# For mainnet: also trigger via workflow_dispatch (manual) or repository_dispatch (external cron).
+# GitHub schedule is BEST-EFFORT (often 60–120+ min between triggers).
+# Use repository_dispatch (npm run treasury:trigger / cron-job.org) for ~10 min cadence.
+# treasury-worker.mjs already runs DMs at the end of each pass — no separate dm step.
 
 name: Treasury Agent
 
 on:
   schedule:
-    # Staggered UTC minutes — avoids top-of-hour pile-ups; still best-effort on GitHub's side.
     - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
   repository_dispatch:
@@ -23,7 +22,7 @@ concurrency:
 jobs:
   fulfill-withdrawals:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -49,20 +48,10 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           echo "Commit: $(git rev-parse HEAD)"
 
-      - name: Run treasury loop (multiple passes per trigger)
+      - name: Run treasury worker (seeds, withdrawals, DMs, status)
         env:
           TREASURY_MNEMONIC: ${{ secrets.TREASURY_MNEMONIC }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
-          TREASURY_CI_LOOP_MS: 480000
-          TREASURY_POLL_MS: 60000
-        run: node backend/scripts/treasury-ci-loop.mjs
-
-      - name: Process DM queue
-        env:
-          TREASURY_MNEMONIC: ${{ secrets.TREASURY_MNEMONIC }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
-        run: npm run dm:worker
+        run: npm run treasury:worker

@@ -75,7 +75,9 @@ Withdrawals are queued in Postgres. The **treasury agent** sends UCT on Sphere t
 
 Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loop first, then DMs).
 
-**GitHub schedule is not real-time.** Cron triggers are *best-effort* — many repos see 15–60+ minute gaps between runs even when the workflow says `*/5`. This is a known GitHub Actions limitation (not a bug in sphere-predict). Each triggered run now performs **~8 treasury passes** over 8 minutes (`treasury-ci-loop.mjs`), so one delayed trigger still clears multiple queue items.
+**GitHub schedule is not real-time.** Cron triggers are *best-effort* — this repo sees **60–120+ minute** gaps between scheduled runs. Each run performs **one treasury pass** (consolidate → seeds → withdrawals → DMs → publish status). Use **external cron** (`npm run treasury:trigger` every 10 min) for reliable timing.
+
+**If Actions shows red X at ~10m:** the job hit its timeout (older workflows used an 8-min loop that exceeded 10m). Current workflow uses a single pass with a 15m timeout.
 
 Check last worker activity: Supabase `treasury_status.updated_at` or Admin → on-chain treasury timestamp.
 
