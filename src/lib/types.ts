@@ -1,4 +1,5 @@
-export type MarketStatus = 'open' | 'closed' | 'resolved'
+export type MarketStatus = 'pending_seed' | 'open' | 'closed' | 'resolved'
+export type MarketSeedStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
 export type Outcome = 'YES' | 'NO'
 export type Side = Outcome
 export type PositionStatus = 'open' | 'settled'
@@ -46,6 +47,11 @@ export interface Market {
   no_pool: number
   volume: number
   seed_liquidity?: number
+  seed_status?: MarketSeedStatus
+  seed_payment_memo?: string | null
+  seed_tx_reference?: string | null
+  seed_failure_reason?: string | null
+  seed_completed_at?: string | null
   trending_score: number
   resolution?: Outcome | null
   resolved_outcome?: Outcome | null

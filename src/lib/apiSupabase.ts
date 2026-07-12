@@ -63,7 +63,13 @@ export async function authenticate(auth: AuthHeaders) {
   return invoke<{ user: User; portfolio: Portfolio }>('/auth', { auth, payload: auth })
 }
 
-export async function fetchMarkets(params?: { search?: string; category?: string; status?: string; trending?: boolean }) {
+export async function fetchMarkets(params?: {
+  search?: string
+  category?: string
+  status?: string
+  trending?: boolean
+  includePendingSeed?: boolean
+}) {
   if (supabase && !params?.search) {
     let q = supabase.from('markets').select('*')
     if (params?.status && params.status !== 'all') q = q.eq('status', params.status)
@@ -72,7 +78,9 @@ export async function fetchMarkets(params?: { search?: string; category?: string
     else q = q.order('created_at', { ascending: false })
     const { data, error } = await q
     if (!error && data) {
-      let markets = data.map(enrichMarket)
+      let markets = data
+        .filter(m => params?.includePendingSeed || m.status !== 'pending_seed')
+        .map(enrichMarket)
       if (params?.search) {
         const s = params.search.toLowerCase()
         markets = markets.filter(m => m.question.toLowerCase().includes(s))
@@ -86,6 +94,7 @@ export async function fetchMarkets(params?: { search?: string; category?: string
       category: params?.category,
       status: params?.status,
       trending: params?.trending,
+      includePendingSeed: params?.includePendingSeed,
     },
   })
 }
@@ -144,10 +153,34 @@ export async function placeTrade(
 export async function adminTreasurySeed(auth: AuthHeaders) {
   return invoke<{
     treasuryUserId: string
-    availableBalance: number
     seedPerMarket: number
+    onChainBalance: number
+    uctTokenCount: number
+    largestCoin: number
+    pendingWithdrawals: number
+    pendingSeeds: number
+    spendableAfterReserves: number
     canCreateMarket: boolean
+    statusUpdatedAt: string | null
+    statusFresh: boolean
+    source: string
   }>('/admin/treasury-seed', { auth })
+}
+
+export async function adminMarketSeedQueue(auth: AuthHeaders) {
+  return invoke<{
+    counts: Record<string, number>
+    recent: Array<{
+      id: string
+      question: string
+      seed_liquidity: number
+      seed_status: string
+      seed_tx_reference?: string | null
+      seed_failure_reason?: string | null
+      created_at: string
+      seed_completed_at?: string | null
+    }>
+  }>('/admin/market-seeds/queue', { auth })
 }
 
 export async function adminCreateMarket(

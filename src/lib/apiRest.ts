@@ -93,10 +93,22 @@ export async function placeTrade(
 export async function adminTreasurySeed(_auth: AuthHeaders) {
   return {
     treasuryUserId: '',
-    availableBalance: 1000,
     seedPerMarket: 100,
-    canCreateMarket: true,
+    onChainBalance: 0,
+    uctTokenCount: 0,
+    largestCoin: 0,
+    pendingWithdrawals: 0,
+    pendingSeeds: 0,
+    spendableAfterReserves: 0,
+    canCreateMarket: false,
+    statusUpdatedAt: null,
+    statusFresh: false,
+    source: 'rest',
   }
+}
+
+export async function adminMarketSeedQueue(_auth: AuthHeaders) {
+  return { counts: {}, recent: [] }
 }
 
 export async function adminCreateMarket(

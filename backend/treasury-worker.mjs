@@ -24,9 +24,12 @@ import { normalizeRecipient, rawToHuman } from './lib/constants.mjs'
 import { buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
+import { consolidateTreasuryCoins } from './lib/treasuryConsolidate.mjs'
 import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInventory.mjs'
+import { publishTreasuryStatus } from './lib/treasuryStatus.mjs'
 import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
-import { getUctDecimals, initTreasurySphere } from './lib/sphereProviders.mjs'
+import { buildSeedMemo } from './lib/paymentMemos.mjs'
+import { getUctCoinId, getUctDecimals, initTreasurySphere } from './lib/sphereProviders.mjs'
 
 loadProjectEnv()
 
@@ -36,7 +39,10 @@ const STATUS_ONLY = process.argv.includes('--status')
 const POLL_MS = Number(process.env.TREASURY_POLL_MS || 60_000)
 const MAX_AMOUNT = Number(process.env.MAX_AUTO_WITHDRAWAL_UCT || 500)
 const MAX_PER_RUN = Number(process.env.MAX_PER_RUN || 5)
+const MAX_SEEDS_PER_RUN = Number(process.env.MAX_SEEDS_PER_RUN || 3)
 const STALE_MINUTES = Number(process.env.STALE_PROCESSING_MINUTES || 10)
+const MARKET_SEED_LIQUIDITY_UCT = Number(process.env.MARKET_SEED_LIQUIDITY_UCT || 100)
+const UCT_COIN_ID = getUctCoinId()
 
 function requireEnv(name) {
   const v = process.env[name]
@@ -209,7 +215,191 @@ async function showStatus(db) {
   for (const status of statuses) {
     console.log(`  ${status}: ${counts[status]}`)
   }
-  return counts
+
+  const seedStatuses = ['pending', 'processing', 'completed', 'failed']
+  const seedCounts = {}
+  for (const status of seedStatuses) {
+    const { count } = await db.from('markets').select('*', { count: 'exact', head: true }).eq('seed_status', status)
+    seedCounts[status] = count ?? 0
+  }
+  console.log('[treasury-agent] market seed queue status:')
+  for (const status of seedStatuses) {
+    console.log(`  ${status}: ${seedCounts[status]}`)
+  }
+  return { withdrawals: counts, seeds: seedCounts }
+}
+
+function treasuryRecipient(sphere) {
+  const tag = (sphere.identity?.nametag || process.env.TREASURY_NAMETAG || 'sphere-predict')
+    .replace(/^@/, '')
+  return `@${tag}`
+}
+
+async function resetStaleSeedProcessing(db) {
+  const cutoff = new Date(Date.now() - STALE_MINUTES * 60_000).toISOString()
+  const { data } = await db.from('markets')
+    .update({ seed_status: 'pending', seed_processing_at: null })
+    .eq('seed_status', 'processing')
+    .lt('seed_processing_at', cutoff)
+    .select('id')
+  if (data?.length) {
+    console.log(`[treasury-agent] reset ${data.length} stale processing market seed(s)`)
+  }
+}
+
+async function failMarketSeed(db, market, reason, { requeue = false } = {}) {
+  if (requeue) {
+    await db.from('markets').update({
+      seed_status: 'pending',
+      seed_failure_reason: reason.slice(0, 500),
+      seed_processing_at: null,
+    }).eq('id', market.id)
+    console.warn(`[treasury-agent] requeued seed ${market.id}: ${reason}`)
+    return
+  }
+
+  await db.from('markets').update({
+    status: 'closed',
+    seed_status: 'failed',
+    seed_failure_reason: reason.slice(0, 500),
+    seed_processing_at: null,
+  }).eq('id', market.id)
+  console.error(`[treasury-agent] seed failed ${market.id}: ${reason}`)
+}
+
+async function processMarketSeeds(db, sphere, { dryRun = false } = {}) {
+  if (!dryRun) await resetStaleSeedProcessing(db)
+
+  const { data: pending, error } = await db.from('markets')
+    .select('id, question, seed_liquidity, seed_payment_memo, created_by')
+    .eq('seed_status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(MAX_SEEDS_PER_RUN)
+
+  if (error) throw error
+  if (!pending?.length) {
+    console.log(`[treasury-agent] no pending market seeds${dryRun ? ' (dry-run)' : ''}`)
+    return 0
+  }
+
+  let processed = 0
+  for (const market of pending) {
+    const amount = normalizeWithdrawalAmount(market.seed_liquidity)
+    if (!amount || amount <= 0) {
+      if (!dryRun) {
+        await db.from('markets').update({
+          status: 'open',
+          seed_status: 'skipped',
+          seed_completed_at: new Date().toISOString(),
+        }).eq('id', market.id)
+      }
+      processed += 1
+      continue
+    }
+
+    const seedPerSide = amount / 2
+    const memo = market.seed_payment_memo || buildSeedMemo({ marketId: market.id, amount })
+    const sendRaw = withdrawalAmountToRaw(amount, treasuryUctDecimals)
+    const recipient = treasuryRecipient(sphere)
+
+    if (dryRun) {
+      console.log(`  → would seed ${formatWithdrawalAmount(amount)} UCT for market ${market.id} memo=${memo}`)
+      processed += 1
+      continue
+    }
+
+    const { data: locked, error: lockErr } = await db.from('markets')
+      .update({ seed_status: 'processing', seed_processing_at: new Date().toISOString() })
+      .eq('id', market.id)
+      .eq('seed_status', 'pending')
+      .select()
+      .single()
+    if (lockErr || !locked) continue
+
+    let sendCompleted = false
+    try {
+      let bal = await refreshSpendableInventory(sphere)
+      if (bal.raw < sendRaw) {
+        bal = await refreshSpendableInventory(sphere)
+      }
+      if (bal.raw < sendRaw) {
+        await failMarketSeed(db, market, `Treasury has only ${formatWithdrawalAmount(bal.human)} UCT spendable on-chain`, {
+          requeue: true,
+        })
+        continue
+      }
+
+      const inventory = summarizeUctInventory(sphere)
+      if (inventory.largestRaw < sendRaw) {
+        console.warn(
+          `[treasury-agent] seed ${market.id}: no single coin ≥ ${formatWithdrawalAmount(amount)} UCT `
+          + `(${inventory.tokenCount} coins) — consolidation may help next pass`,
+        )
+      }
+
+      console.log(
+        `[treasury-agent] seeding ${formatWithdrawalAmount(amount)} UCT on-chain for market ${market.id} `
+        + `(self-attest → ${recipient})`,
+      )
+      const result = await sphere.payments.send({
+        recipient,
+        amount: String(sendRaw),
+        coinId: 'UCT',
+        memo,
+        transferMode: 'conservative',
+      })
+      sendCompleted = true
+
+      if (typeof sphere.payments.waitForPendingOperations === 'function') {
+        await sphere.payments.waitForPendingOperations()
+      }
+      if (!isSendSettled(result?.status)) {
+        throw new Error(`Seed send did not settle (status=${result?.status || 'unknown'})`)
+      }
+
+      try {
+        await sphere.payments.receive()
+      } catch { /* best-effort ingest */ }
+
+      const ref = txReference(result)
+      const { error: completeErr } = await db.from('markets').update({
+        status: 'open',
+        seed_status: 'completed',
+        seed_completed_at: new Date().toISOString(),
+        seed_tx_reference: String(ref),
+        seed_payment_memo: memo,
+        seed_failure_reason: null,
+        yes_pool: seedPerSide,
+        no_pool: seedPerSide,
+        volume: amount,
+        trending_score: 10 + amount * 0.1,
+      }).eq('id', market.id).eq('seed_status', 'processing')
+      if (completeErr) throw completeErr
+
+      if (market.created_by) {
+        await notify(
+          db,
+          market.created_by,
+          'market',
+          'Market live',
+          `"${String(market.question || '').slice(0, 60)}" is live — ${formatWithdrawalAmount(amount)} UCT seeded on-chain.`,
+          { marketId: market.id, seedTotal: amount, txReference: ref, agent: 'treasury-worker' },
+        ).catch(() => {})
+      }
+
+      console.log(`[treasury-agent] seed completed ${market.id} tx=${ref}`)
+      processed += 1
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e)
+      console.error(`[treasury-agent] seed failed ${market.id}:`, reason)
+      const inventoryMismatch = isSpendableInventoryError(reason)
+      await failMarketSeed(db, market, reason, {
+        requeue: inventoryMismatch && !sendCompleted,
+      })
+    }
+  }
+
+  return processed
 }
 
 async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
@@ -435,16 +625,20 @@ async function runOnce() {
   }
 
   if (DRY_RUN) {
-    console.log('[treasury-agent] DRY-RUN — no wallet init, no DB writes, no on-chain sends')
+    console.log('[treasury-agent] DRY-RUN — no wallet init, no on-chain sends')
+    const seeds = await processMarketSeeds(db, null, { dryRun: true })
     const n = await processWithdrawals(db, null, { dryRun: true })
-    console.log(`[treasury-agent] dry-run done — would process ${n} withdrawal(s)`)
+    console.log(`[treasury-agent] dry-run done — would process ${seeds} seed(s), ${n} withdrawal(s)`)
     return
   }
 
   const sphere = await prepareTreasurySphere(await initSphere())
+  await consolidateTreasuryCoins(sphere)
+  const seeds = await processMarketSeeds(db, sphere)
   const n = await processWithdrawals(db, sphere)
+  await publishTreasuryStatus(db, sphere)
   const dms = await processOutboundDms(db, sphere)
-  console.log(`[treasury-agent] done — processed ${n} withdrawal(s), sent ${dms} DM(s)`)
+  console.log(`[treasury-agent] done — processed ${seeds} seed(s), ${n} withdrawal(s), sent ${dms} DM(s)`)
 }
 
 async function main() {

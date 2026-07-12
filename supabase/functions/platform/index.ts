@@ -159,7 +159,7 @@ function resolveTreasuryUserId(
   return treasury?.id || fallbackUserId
 }
 
-/** Ledger row for @sphere-predict — funds 50/50 market seed liquidity. */
+/** @sphere-predict user row (on-chain treasury; internal ledger not used for seeds). */
 async function ensureTreasuryUser(db: SupabaseClient) {
   const { data: users } = await db.from('users').select('id, nametag, wallet_address, is_admin')
   let treasury = (users || []).find(isTreasuryUser)
@@ -181,6 +181,21 @@ function marketSeedAmounts() {
   const seedTotal = MARKET_SEED_LIQUIDITY_UCT
   if (!seedTotal || seedTotal <= 0) return { seedTotal: 0, seedPerSide: 0 }
   return { seedTotal, seedPerSide: seedTotal / 2 }
+}
+
+async function sumPendingWithdrawals(db: SupabaseClient) {
+  const { data } = await db.from('withdrawals').select('amount').in('status', ['submitted', 'processing'])
+  return (data || []).reduce((sum, row) => sum + Number(row.amount || 0), 0)
+}
+
+async function sumPendingSeeds(db: SupabaseClient) {
+  const { data } = await db.from('markets').select('seed_liquidity').in('seed_status', ['pending', 'processing'])
+  return (data || []).reduce((sum, row) => sum + Number(row.seed_liquidity || 0), 0)
+}
+
+async function getTreasuryOnChainStatus(db: SupabaseClient) {
+  const { data } = await db.from('treasury_status').select('*').eq('id', 1).maybeSingle()
+  return data
 }
 
 function dmRecipientFromUser(user: { nametag?: string | null; wallet_address?: string | null } | null | undefined) {
@@ -298,13 +313,21 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
   }
 }
 
-async function listMarkets(db: SupabaseClient, params: { search?: string; category?: string; status?: string; trending?: boolean }) {
+async function listMarkets(db: SupabaseClient, params: {
+  search?: string
+  category?: string
+  status?: string
+  trending?: boolean
+  includePendingSeed?: boolean
+}) {
   let q = db.from('markets').select('*')
   if (params.status && params.status !== 'all') q = q.eq('status', params.status)
   if (params.category && params.category !== 'all') q = q.eq('category', params.category)
   const { data, error } = await q
   if (error) throw error
-  let markets = data || []
+  let markets = params.includePendingSeed
+    ? (data || [])
+    : (data || []).filter(m => m.status !== 'pending_seed')
   if (params.search) {
     const s = params.search.toLowerCase()
     markets = markets.filter(m =>
@@ -343,6 +366,9 @@ async function placeTrade(db: SupabaseClient, userId: string, payload: Record<st
   const { data: market, error: mErr } = await db.from('markets').select('*').eq('id', marketId).single()
   if (mErr || !market) throw new Error('Market not found')
   if (market.status !== 'open') throw new Error('Market is not open for trading')
+  if (market.seed_status && !['completed', 'skipped'].includes(String(market.seed_status))) {
+    throw new Error('Market liquidity is still being seeded on-chain — try again shortly')
+  }
   if (new Date(market.deadline) < new Date()) throw new Error('Market has closed')
 
   const totalBefore = Number(market.yes_pool) + Number(market.no_pool)
@@ -438,6 +464,7 @@ Deno.serve(async (req) => {
         category: (payload.category as string) || url.searchParams.get('category') || undefined,
         status: (payload.status as string) || url.searchParams.get('status') || undefined,
         trending: payload.trending === true || url.searchParams.get('trending') === '1',
+        includePendingSeed: payload.includePendingSeed === true || url.searchParams.get('includePendingSeed') === '1',
       })
       return json({ markets })
     }
@@ -626,13 +653,31 @@ Deno.serve(async (req) => {
 
     if (route === '/admin/treasury-seed') {
       const treasury = await ensureTreasuryUser(db)
-      const bal = await getBalance(db, treasury.id)
       const { seedTotal } = marketSeedAmounts()
+      const onChain = await getTreasuryOnChainStatus(db)
+      const [pendingWithdrawals, pendingSeeds] = await Promise.all([
+        sumPendingWithdrawals(db),
+        sumPendingSeeds(db),
+      ])
+      const onChainBalance = Number(onChain?.on_chain_balance || 0)
+      const spendable = onChain
+        ? Number(onChain.spendable_after_reserves || 0)
+        : Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
+      const statusAgeMs = onChain?.updated_at ? Date.now() - new Date(String(onChain.updated_at)).getTime() : null
+      const statusFresh = statusAgeMs != null && statusAgeMs < 15 * 60_000
       return json({
         treasuryUserId: treasury.id,
-        availableBalance: bal,
         seedPerMarket: seedTotal,
-        canCreateMarket: seedTotal <= 0 || bal >= seedTotal,
+        onChainBalance,
+        uctTokenCount: Number(onChain?.uct_token_count || 0),
+        largestCoin: Number(onChain?.largest_coin_human || 0),
+        pendingWithdrawals,
+        pendingSeeds,
+        spendableAfterReserves: spendable,
+        canCreateMarket: seedTotal <= 0 || (statusFresh && spendable >= seedTotal),
+        statusUpdatedAt: onChain?.updated_at || null,
+        statusFresh,
+        source: onChain ? 'treasury_status' : 'unknown',
       })
     }
 
@@ -645,12 +690,30 @@ Deno.serve(async (req) => {
       const treasuryUserId = treasury.id
 
       if (seedTotal > 0) {
-        const bal = await getBalance(db, treasuryUserId)
-        if (bal < seedTotal) {
+        const onChain = await getTreasuryOnChainStatus(db)
+        const [pendingWithdrawals, pendingSeeds] = await Promise.all([
+          sumPendingWithdrawals(db),
+          sumPendingSeeds(db),
+        ])
+        const onChainBalance = Number(onChain?.on_chain_balance || 0)
+        const spendable = onChain
+          ? Number(onChain.spendable_after_reserves || 0)
+          : Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
+        const statusAgeMs = onChain?.updated_at ? Date.now() - new Date(String(onChain.updated_at)).getTime() : null
+        const statusFresh = statusAgeMs != null && statusAgeMs < 15 * 60_000
+
+        if (!onChain || !statusFresh) {
           throw new Error(
-            `Treasury seed fund needs at least ${seedTotal} UCT (50/50 YES/NO per market). `
-            + `Current @sphere-predict ledger: ${bal.toFixed(2)} UCT. `
-            + `Top up the treasury seed balance in Supabase (balances row for @sphere-predict) or run migration 013.`,
+            'Treasury on-chain balance is unknown or stale. Run the treasury worker (GitHub Actions) '
+            + 'and ensure @sphere-predict has spendable UCT before creating markets.',
+          )
+        }
+        if (spendable < seedTotal) {
+          throw new Error(
+            `Treasury needs at least ${seedTotal} UCT free on-chain for market seed (50/50 YES/NO). `
+            + `Spendable after pending withdrawals/seeds: ${spendable.toFixed(2)} UCT `
+            + `(wallet ${onChainBalance.toFixed(2)}, reserved wd=${pendingWithdrawals.toFixed(2)} seed=${pendingSeeds.toFixed(2)}). `
+            + `Top up @sphere-predict or wait for the treasury agent.`,
           )
         }
       }
@@ -660,37 +723,32 @@ Deno.serve(async (req) => {
         description: payload.description || null,
         resolution_criteria: payload.resolutionCriteria || payload.resolution_criteria || null,
         category: payload.category || 'GENERAL',
-        status: 'open',
+        status: seedTotal > 0 ? 'pending_seed' : 'open',
         deadline: new Date(Date.now() + Number(payload.daysOpen || 7) * 864e5).toISOString(),
         created_by: user.id,
-        trending_score: 10 + seedTotal * 0.1,
-        yes_pool: seedPerSide,
-        no_pool: seedPerSide,
-        volume: seedTotal,
+        trending_score: seedTotal > 0 ? 0 : 10,
+        yes_pool: seedTotal > 0 ? 0 : seedPerSide,
+        no_pool: seedTotal > 0 ? 0 : seedPerSide,
+        volume: 0,
         seed_liquidity: seedTotal,
+        seed_status: seedTotal > 0 ? 'pending' : 'skipped',
       }).select().single()
       if (error) throw error
 
       if (seedTotal > 0) {
-        const bal = await getBalance(db, treasuryUserId)
-        try {
-          await setBalance(db, treasuryUserId, bal - seedTotal)
-        } catch (e) {
-          await db.from('markets').delete().eq('id', data.id)
-          throw e
-        }
-        const paymentMemo = buildSeedMemo({ userId: treasuryUserId, marketId: data.id, amount: seedTotal })
+        const finalMemo = buildSeedMemo({ userId: treasuryUserId, marketId: data.id, amount: seedTotal })
+        await db.from('markets').update({ seed_payment_memo: finalMemo }).eq('id', data.id)
         await notify(
           db,
-          treasuryUserId,
+          user.id,
           'market',
-          'Liquidity seeded',
-          `${seedTotal} UCT (50 YES / 50 NO) added to "${question.slice(0, 60)}".`,
-          { marketId: data.id, seedTotal, seedPerSide, payment_memo: paymentMemo },
+          'Market queued for seeding',
+          `"${question.slice(0, 60)}" queued — treasury will send ${seedTotal} UCT on-chain before trading opens.`,
+          { marketId: data.id, seedTotal, seedPerSide, payment_memo: finalMemo },
         ).catch(() => {})
         return json({
-          market: data,
-          seed: { total: seedTotal, perSide: seedPerSide, payment_memo: paymentMemo },
+          market: { ...data, seed_payment_memo: finalMemo, seed_status: 'pending', status: 'pending_seed' },
+          seed: { total: seedTotal, perSide: seedPerSide, payment_memo: finalMemo, status: 'pending' },
         })
       }
 
@@ -782,6 +840,21 @@ Deno.serve(async (req) => {
       })
 
       return json({ market: { ...market, status: 'resolved', resolution: res }, settlement: { total_payout: totalPayout } })
+    }
+
+    if (route === '/admin/market-seeds/queue') {
+      const statuses = ['pending', 'processing', 'completed', 'failed'] as const
+      const counts: Record<string, number> = {}
+      await Promise.all(statuses.map(async status => {
+        const { count } = await db.from('markets').select('*', { count: 'exact', head: true }).eq('seed_status', status)
+        counts[status] = count ?? 0
+      }))
+      const { data: recent } = await db.from('markets')
+        .select('id, question, seed_liquidity, seed_status, seed_tx_reference, seed_failure_reason, created_at, seed_completed_at')
+        .neq('seed_status', 'skipped')
+        .order('created_at', { ascending: false })
+        .limit(25)
+      return json({ counts, recent: recent || [] })
     }
 
     if (route === '/admin/withdrawals/queue') {

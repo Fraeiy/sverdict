@@ -12,6 +12,7 @@ export function useMarkets(opts?: { autoLoad?: boolean }) {
     category?: string
     status?: string
     trending?: boolean
+    includePendingSeed?: boolean
   }) => {
     setError(null)
     try {

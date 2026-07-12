@@ -81,6 +81,11 @@ export function usePlatform(identity: WalletIdentity | null) {
     return api.adminFulfillWithdrawal(auth, withdrawalId, txReference)
   }, [auth])
 
+  const marketSeedQueue = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminMarketSeedQueue(auth)
+  }, [auth])
+
   return useMemo(() => ({
     user,
     auth,
@@ -94,6 +99,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     withdrawalQueue,
     listPendingWithdrawals,
     fulfillWithdrawal,
+    marketSeedQueue,
   }), [
     user,
     auth,
@@ -106,6 +112,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     withdrawalQueue,
     listPendingWithdrawals,
     fulfillWithdrawal,
+    marketSeedQueue,
   ])
 }
 

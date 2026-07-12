@@ -24,6 +24,17 @@ type PendingWithdrawal = {
   users?: { nametag?: string | null; wallet_address?: string }
 }
 
+type SeedQueueRow = {
+  id: string
+  question: string
+  seed_liquidity: number
+  seed_status: string
+  created_at: string
+  seed_completed_at?: string | null
+  seed_tx_reference?: string | null
+  seed_failure_reason?: string | null
+}
+
 const STATUS_CHIP: Record<string, string> = {
   submitted: 'chip-neutral',
   processing: 'chip-gold',
@@ -51,8 +62,15 @@ export function AdminPage({ platform, onToast }: Props) {
   const [showManual, setShowManual] = useState(false)
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
   const [fulfillingId, setFulfillingId] = useState<string | null>(null)
-  const [seedBalance, setSeedBalance] = useState<number | null>(null)
+  const [onChainBalance, setOnChainBalance] = useState<number | null>(null)
+  const [spendableBalance, setSpendableBalance] = useState<number | null>(null)
+  const [uctTokenCount, setUctTokenCount] = useState<number | null>(null)
+  const [largestCoin, setLargestCoin] = useState<number | null>(null)
   const [seedPerMarket, setSeedPerMarket] = useState(100)
+  const [treasuryStatusFresh, setTreasuryStatusFresh] = useState(false)
+  const [seedCounts, setSeedCounts] = useState<Record<string, number>>({})
+  const [recentSeeds, setRecentSeeds] = useState<SeedQueueRow[]>([])
+  const [seedQueueLoading, setSeedQueueLoading] = useState(false)
 
   const onToastRef = useRef(onToast)
   onToastRef.current = onToast
@@ -116,30 +134,55 @@ export function AdminPage({ platform, onToast }: Props) {
   }, [])
 
   useEffect(() => {
-    load({ trending: true }).catch(() => {})
+    load({ trending: true, includePendingSeed: true }).catch(() => {})
   }, [load])
 
   const loadTreasurySeed = useCallback(async () => {
     if (!platform.isAdmin) return
     try {
       const s = await platform.treasurySeed()
-      setSeedBalance(s.availableBalance)
+      setOnChainBalance(s.onChainBalance)
+      setSpendableBalance(s.spendableAfterReserves)
+      setUctTokenCount(s.uctTokenCount)
+      setLargestCoin(s.largestCoin)
       setSeedPerMarket(s.seedPerMarket)
+      setTreasuryStatusFresh(s.statusFresh)
     } catch {
-      setSeedBalance(null)
+      setOnChainBalance(null)
+      setSpendableBalance(null)
+      setUctTokenCount(null)
+      setLargestCoin(null)
+      setTreasuryStatusFresh(false)
     }
   }, [platform])
+
+  const loadSeedQueue = useCallback(async () => {
+    const p = platformRef.current
+    if (!p.isAdmin) return
+    setSeedQueueLoading(true)
+    try {
+      const { counts: c, recent: r } = await p.marketSeedQueue()
+      setSeedCounts(c || {})
+      setRecentSeeds((r || []) as SeedQueueRow[])
+    } catch {
+      /* optional until edge function deployed */
+    } finally {
+      setSeedQueueLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!platform.isAdmin) return
     loadQueue().catch(() => {})
     loadTreasurySeed().catch(() => {})
+    loadSeedQueue().catch(() => {})
     const interval = setInterval(() => {
       loadQueue().catch(() => {})
       loadTreasurySeed().catch(() => {})
+      loadSeedQueue().catch(() => {})
     }, 30_000)
     return () => clearInterval(interval)
-  }, [platform.isAdmin, loadQueue, loadTreasurySeed])
+  }, [platform.isAdmin, loadQueue, loadTreasurySeed, loadSeedQueue])
 
   async function createMarket() {
     if (!question.trim()) {
@@ -157,9 +200,10 @@ export function AdminPage({ platform, onToast }: Props) {
       setQuestion('')
       setDescription('')
       setCriteria('')
-      await load({ trending: true })
+      await load({ trending: true, includePendingSeed: true })
       await loadTreasurySeed()
-      onToast('Market created')
+      await loadSeedQueue()
+      onToast('Market queued — treasury will seed on-chain before trading opens')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Failed to create market', 'error')
     }
@@ -309,18 +353,84 @@ export function AdminPage({ platform, onToast }: Props) {
         )}
       </div>
 
+      <div className="card mt-8 border-[rgba(34,197,94,0.22)] p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Market seed queue</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-2)]">
+              Treasury agent sends {fmtUct(seedPerMarket)} UCT on-chain per market before pools go live.
+            </p>
+          </div>
+          <button
+            onClick={() => loadSeedQueue()}
+            disabled={seedQueueLoading}
+            className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(['pending', 'processing', 'completed', 'failed'] as const).map(status => (
+            <div key={status} className="stat-block text-center">
+              <p className="label-caps capitalize">{status}</p>
+              <p className="mt-1 font-data text-2xl font-bold text-[var(--color-gold)]">
+                {seedCounts[status] ?? 0}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {recentSeeds.length === 0 ? (
+          <p className="text-sm text-[var(--color-muted)]">No market seeds yet</p>
+        ) : (
+          <div className="max-h-60 space-y-2 overflow-y-auto">
+            {recentSeeds.map(s => (
+              <div key={s.id} className="card flex flex-wrap items-center gap-3 p-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{fmtUct(s.seed_liquidity)}</p>
+                    <span className={`chip capitalize ${STATUS_CHIP[s.seed_status] || 'chip-neutral'}`}>
+                      {s.seed_status}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-sm">{s.question}</p>
+                  {s.seed_tx_reference && (
+                    <p className="mt-1 truncate font-data text-[9px] text-[var(--color-text-2)]" title={s.seed_tx_reference}>
+                      Tx {s.seed_tx_reference}
+                    </p>
+                  )}
+                  {s.seed_failure_reason && (
+                    <p className="mt-1 text-xs text-[var(--color-no)]">{s.seed_failure_reason}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="card mt-8 p-6">
         <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Create market</h2>
         <p className="mb-4 text-sm text-[var(--color-text-2)]">
-          Each new market seeds <strong className="text-[var(--color-gold)]">{seedPerMarket} UCT</strong> from the @sphere-predict treasury seed ledger — 50 YES / 50 NO — so odds start at 50% with real liquidity.
+          Each new market requires <strong className="text-[var(--color-gold)]">{fmtUct(seedPerMarket)}</strong> on-chain from @sphere-predict — 50 YES / 50 NO pools activate after the treasury agent confirms the send.
         </p>
-        {seedBalance != null && (
-          <p className={`mb-4 font-data text-[11px] ${seedBalance < seedPerMarket ? 'text-[var(--color-no)]' : 'text-[var(--color-muted)]'}`}>
-            Treasury seed available: <span className="font-bold text-[var(--color-gold)]">{fmtUct(seedBalance)}</span>
-            {seedBalance < seedPerMarket && (
-              <> — need at least {fmtUct(seedPerMarket)}. Run migration 013 or top up the @sphere-predict balance row in Supabase.</>
-            )}
-          </p>
+        {onChainBalance != null && (
+          <div className={`mb-4 space-y-1 font-data text-[11px] ${!treasuryStatusFresh || (spendableBalance ?? 0) < seedPerMarket ? 'text-[var(--color-no)]' : 'text-[var(--color-muted)]'}`}>
+            <p>
+              On-chain @sphere-predict: <span className="font-bold text-[var(--color-gold)]">{fmtUct(onChainBalance)}</span>
+              {uctTokenCount != null && uctTokenCount > 1 && (
+                <> · {uctTokenCount} UCT coins{largestCoin != null ? ` (largest ${fmtUct(largestCoin)})` : ''}</>
+              )}
+            </p>
+            <p>
+              Spendable after reserves: <span className="font-bold">{fmtUct(spendableBalance ?? 0)}</span>
+              {!treasuryStatusFresh && <> — treasury status stale; wait for GitHub Actions worker</>}
+              {treasuryStatusFresh && (spendableBalance ?? 0) < seedPerMarket && (
+                <> — need at least {fmtUct(seedPerMarket)} free on-chain</>
+              )}
+            </p>
+          </div>
         )}
         <div className="space-y-4">
           <input
@@ -374,24 +484,26 @@ export function AdminPage({ platform, onToast }: Props) {
             <div key={m.id} className="card flex flex-wrap items-center gap-3 p-4">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{m.question}</p>
-                <p className="text-xs text-slate-500">{m.status} · {timeRemaining(m.deadline)}</p>
+                <p className="text-xs text-slate-500">
+                  {m.status}{m.seed_status && m.seed_status !== 'completed' && m.seed_status !== 'skipped' ? ` · seed ${m.seed_status}` : ''} · {timeRemaining(m.deadline)}
+                </p>
               </div>
               {m.status === 'open' && (
                 <button
-                  onClick={() => platform.closeMarket(m.id).then(() => load({ trending: true }))}
+                  onClick={() => platform.closeMarket(m.id).then(() => load({ trending: true, includePendingSeed: true }))}
                   className="rounded-lg border border-white/10 px-3 py-1.5 text-xs hover:bg-white/5"
                 >
                   Close
                 </button>
               )}
               <button
-                onClick={() => platform.resolveMarket(m.id, 'YES').then(() => { load({ trending: true }); onToast('Resolved YES') })}
+                onClick={() => platform.resolveMarket(m.id, 'YES').then(() => { load({ trending: true, includePendingSeed: true }); onToast('Resolved YES') })}
                 className="chip chip-yes cursor-pointer px-3 py-1.5"
               >
                 Resolve YES
               </button>
               <button
-                onClick={() => platform.resolveMarket(m.id, 'NO').then(() => { load({ trending: true }); onToast('Resolved NO') })}
+                onClick={() => platform.resolveMarket(m.id, 'NO').then(() => { load({ trending: true, includePendingSeed: true }); onToast('Resolved NO') })}
                 className="chip chip-no cursor-pointer px-3 py-1.5"
               >
                 Resolve NO

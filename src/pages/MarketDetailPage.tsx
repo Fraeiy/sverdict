@@ -51,7 +51,8 @@ export function MarketDetailPage({ identity, onToast }: Props) {
 
   const yes = yesProbability(market)
   const no = noProbability(market)
-  const isOpen = market.status === 'open' && new Date(market.deadline) > new Date()
+  const seeding = market.seed_status === 'pending' || market.seed_status === 'processing' || market.status === 'pending_seed'
+  const isOpen = market.status === 'open' && !seeding && new Date(market.deadline) > new Date()
   const stakeAmount = parseFloat(amount) || 0
   const insufficient = stakeAmount > availableBalance
 
@@ -103,8 +104,8 @@ export function MarketDetailPage({ identity, onToast }: Props) {
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <span className="chip chip-neutral">{market.category}</span>
-        <span className={`chip ${market.status === 'open' ? 'chip-open' : 'chip-gold'}`}>
-          {market.status}
+        <span className={`chip ${isOpen ? 'chip-open' : seeding ? 'chip-gold' : 'chip-neutral'}`}>
+          {seeding ? 'seeding' : market.status}
         </span>
         <span className="font-data text-[10px] text-[var(--color-muted)]">{timeRemaining(market.deadline)}</span>
       </div>
@@ -165,7 +166,14 @@ export function MarketDetailPage({ identity, onToast }: Props) {
         <span>Closes {new Date(market.deadline).toLocaleDateString()}</span>
       </div>
 
-      {isOpen ? (
+      {seeding ? (
+        <div className="card mt-8 border-[rgba(245,158,11,0.35)] p-6 text-center">
+          <p className="font-data text-xs uppercase tracking-wider text-[var(--color-gold)]">Liquidity seeding</p>
+          <p className="mt-2 text-sm text-[var(--color-text-2)]">
+            Treasury is sending on-chain UCT to open this market. Trading will unlock in a few minutes.
+          </p>
+        </div>
+      ) : isOpen ? (
         <div className="card card-glow mt-8 p-6">
           <p className="label-caps mb-4">Execute position</p>
 

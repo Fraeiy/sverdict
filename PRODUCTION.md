@@ -109,9 +109,22 @@ npm run dm:worker:dry-run
 
 ### Treasury liquidity
 
-User deposits send UCT to `@sphere-predict` from the browser wallet. The treasury agent uses the same mnemonic and must have spendable UCT to fulfill withdrawals (ingest via Sphere SDK `receive()` / sync as needed). Keep the treasury wallet funded on testnet.
+User deposits send UCT to `@sphere-predict` from the browser wallet. The treasury agent uses the same mnemonic and must have spendable UCT to fulfill **withdrawals** and **market seeds** (ingest via Sphere SDK `receive()` / sync as needed). Keep the treasury wallet funded on testnet/mainnet.
 
 `TREASURY_MNEMONIC` must match `@sphere-predict`.
+
+### Market seeding (on-chain)
+
+Creating a market no longer debits a fake Postgres ledger. Instead:
+
+1. Admin creates market → `seed_status=pending`, `status=pending_seed` (hidden from public listings).
+2. Treasury worker sends **100 UCT on-chain** (self-attest to `@sphere-predict` with `SP:v1:seed:mid=…` memo).
+3. Worker sets pools 50/50 and `status=open` when the send settles.
+4. `treasury_status` table reports on-chain balance, coin count, and spendable-after-reserves for Admin UI.
+
+Run migration `014_on_chain_market_seeds.sql` in Supabase SQL Editor if `supabase:push` hangs.
+
+Before mainnet: fund `@sphere-predict` with enough UCT for seeds + withdrawals + buffer. The worker consolidates small UCT coins via self-transfer when inventory has 4+ coins (reduces withdrawal fragmentation).
 
 ### Withdrawal delivery (multiple Sphere inbox lines)
 
