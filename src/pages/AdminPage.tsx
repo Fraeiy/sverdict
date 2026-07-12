@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMarkets } from '../hooks/useMarkets'
 import type { PlatformApi } from '../hooks/usePlatform'
-import { fmtUct, timeRemaining } from '../lib/format'
+import { fmtUct, formatAge, timeRemaining, type WorkerHealth } from '../lib/format'
 
 const CATEGORIES = ['CRYPTO', 'SPORTS', 'POLITICS', 'TECH', 'FINANCE', 'OTHER']
 
@@ -68,6 +68,9 @@ export function AdminPage({ platform, onToast }: Props) {
   const [largestCoin, setLargestCoin] = useState<number | null>(null)
   const [seedPerMarket, setSeedPerMarket] = useState(100)
   const [treasuryStatusFresh, setTreasuryStatusFresh] = useState(false)
+  const [workerLastRunAt, setWorkerLastRunAt] = useState<string | null>(null)
+  const [workerHealth, setWorkerHealth] = useState<WorkerHealth>('unknown')
+  const [workerAgeMinutes, setWorkerAgeMinutes] = useState<number | null>(null)
   const [seedCounts, setSeedCounts] = useState<Record<string, number>>({})
   const [recentSeeds, setRecentSeeds] = useState<SeedQueueRow[]>([])
   const [seedQueueLoading, setSeedQueueLoading] = useState(false)
@@ -147,12 +150,18 @@ export function AdminPage({ platform, onToast }: Props) {
       setLargestCoin(s.largestCoin)
       setSeedPerMarket(s.seedPerMarket)
       setTreasuryStatusFresh(s.statusFresh)
+      setWorkerLastRunAt(s.statusUpdatedAt)
+      setWorkerHealth(s.workerHealth)
+      setWorkerAgeMinutes(s.statusAgeMinutes)
     } catch {
       setOnChainBalance(null)
       setSpendableBalance(null)
       setUctTokenCount(null)
       setLargestCoin(null)
       setTreasuryStatusFresh(false)
+      setWorkerLastRunAt(null)
+      setWorkerHealth('unknown')
+      setWorkerAgeMinutes(null)
     }
   }, [platform])
 
@@ -236,6 +245,19 @@ export function AdminPage({ platform, onToast }: Props) {
 
   const activeMarkets = markets.filter(m => m.status !== 'resolved')
 
+  const workerHealthChip: Record<WorkerHealth, string> = {
+    ok: 'chip-yes',
+    delayed: 'chip-gold',
+    stale: 'chip-no',
+    unknown: 'chip-neutral',
+  }
+  const workerHealthLabel: Record<WorkerHealth, string> = {
+    ok: 'On schedule',
+    delayed: 'Delayed (GitHub schedule)',
+    stale: 'Stale — run workflow or set up external cron',
+    unknown: 'No worker data yet',
+  }
+
   if (!platform.isAdmin) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-16 text-center font-data text-sm text-[var(--color-muted)]">
@@ -249,6 +271,40 @@ export function AdminPage({ platform, onToast }: Props) {
       <p className="label-caps mb-2">Operations</p>
       <h1 className="text-3xl font-bold">Admin</h1>
       <p className="mt-2 text-[var(--color-text-2)]">Create markets, resolve outcomes, monitor treasury withdrawals</p>
+
+      <div className={`card mt-8 p-5 ${
+        workerHealth === 'ok'
+          ? 'border-[rgba(34,197,94,0.28)]'
+          : workerHealth === 'delayed'
+            ? 'border-[rgba(245,158,11,0.35)]'
+            : 'border-[rgba(248,113,113,0.35)]'
+      }`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="label-caps">Treasury worker</p>
+            <p className="mt-1 font-data text-lg font-bold text-[var(--color-gold)]">
+              {workerLastRunAt ? formatAge(workerLastRunAt) : 'Never reported'}
+            </p>
+            <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">
+              {workerLastRunAt
+                ? `Last on-chain publish: ${new Date(workerLastRunAt).toLocaleString()}`
+                : 'Run GitHub Actions once or apply migration 014'}
+              {workerAgeMinutes != null && workerAgeMinutes >= 60 && (
+                <> · GitHub scheduled runs are often 60–120 min apart</>
+              )}
+            </p>
+          </div>
+          <span className={`chip capitalize ${workerHealthChip[workerHealth]}`}>
+            {workerHealthLabel[workerHealth]}
+          </span>
+        </div>
+        {workerHealth !== 'ok' && (
+          <p className="mt-3 text-xs text-[var(--color-text-2)]">
+            For mainnet: set up external cron with <code className="font-data text-[10px]">npm run treasury:trigger</code> every 10 min,
+            or GitHub → Actions → Treasury Agent → <strong>Run workflow</strong>.
+          </p>
+        )}
+      </div>
 
       <div className="card mt-8 border-[rgba(245,158,11,0.28)] p-6">
         <div className="mb-4 flex items-center justify-between gap-3">

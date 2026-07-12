@@ -103,15 +103,23 @@ npm run dm:worker                 # process DM queue
 npm run dm:worker:dry-run
 ```
 
-### Faster triggers for mainnet (optional)
+### Faster triggers for mainnet (recommended)
 
-If ~50 min gaps are unacceptable, use one of:
+Observed schedule gaps on this repo: **~67–125 minutes** between GitHub “Scheduled” runs (each run ~10 min). That is normal GitHub behavior, not a misconfigured cron.
+
+Use one of:
 
 1. **Manual** — GitHub → Actions → Treasury Agent → **Run workflow**
-2. **External cron** — e.g. [cron-job.org](https://cron-job.org) every 5 min POST to:
-   `https://api.github.com/repos/Fraeiy/sphere-predict/dispatches`
-   with body `{"event_type":"treasury-tick"}` and header `Authorization: Bearer <PAT with repo scope>`
+2. **External cron (recommended)** — reliable 5–10 min triggers:
+   - Create a GitHub classic PAT with `repo` scope
+   - On [cron-job.org](https://cron-job.org): every **10 minutes**, POST to  
+     `https://api.github.com/repos/Fraeiy/sphere-predict/dispatches`  
+     Headers: `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`  
+     Body: `{"event_type":"treasury-tick"}`
+   - Or locally / VPS: `GITHUB_PAT=ghp_... npm run treasury:trigger`
 3. **Always-on loop** — small VPS: `npm run treasury:worker:loop` (polls every 60s)
+
+Admin UI shows **Treasury worker → last on-chain publish** from `treasury_status.updated_at`.
 
 ### Test before going live
 

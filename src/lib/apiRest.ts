@@ -103,6 +103,9 @@ export async function adminTreasurySeed(_auth: AuthHeaders) {
     canCreateMarket: false,
     statusUpdatedAt: null,
     statusFresh: false,
+    statusUsable: false,
+    statusAgeMinutes: null,
+    workerHealth: 'unknown' as const,
     source: 'rest',
   }
 }

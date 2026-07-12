@@ -10,6 +10,30 @@ import {
 
 const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
 
+/** GitHub schedule is best-effort — real gaps are often 60–120+ min between runs. */
+const WORKER_FRESH_MS = 20 * 60_000
+const WORKER_USABLE_MS = 180 * 60_000
+
+function treasuryStatusMeta(updatedAt: string | null | undefined) {
+  const statusAgeMs = updatedAt ? Date.now() - new Date(String(updatedAt)).getTime() : null
+  const statusFresh = statusAgeMs != null && statusAgeMs < WORKER_FRESH_MS
+  const statusUsable = statusAgeMs != null && statusAgeMs < WORKER_USABLE_MS
+  const workerHealth = statusAgeMs == null
+    ? 'unknown'
+    : statusAgeMs < WORKER_FRESH_MS
+      ? 'ok'
+      : statusAgeMs < 120 * 60_000
+        ? 'delayed'
+        : 'stale'
+  return {
+    statusAgeMs,
+    statusAgeMinutes: statusAgeMs != null ? Math.round(statusAgeMs / 60_000) : null,
+    statusFresh,
+    statusUsable,
+    workerHealth,
+  }
+}
+
 const DEFAULT_PREFERENCES = {
   defaultStake: 25,
   confirmBeforeTrade: true,
@@ -663,8 +687,7 @@ Deno.serve(async (req) => {
       const spendable = onChain
         ? Number(onChain.spendable_after_reserves || 0)
         : Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
-      const statusAgeMs = onChain?.updated_at ? Date.now() - new Date(String(onChain.updated_at)).getTime() : null
-      const statusFresh = statusAgeMs != null && statusAgeMs < 15 * 60_000
+      const status = treasuryStatusMeta(onChain?.updated_at)
       return json({
         treasuryUserId: treasury.id,
         seedPerMarket: seedTotal,
@@ -674,9 +697,12 @@ Deno.serve(async (req) => {
         pendingWithdrawals,
         pendingSeeds,
         spendableAfterReserves: spendable,
-        canCreateMarket: seedTotal <= 0 || (statusFresh && spendable >= seedTotal),
+        canCreateMarket: seedTotal <= 0 || (status.statusUsable && spendable >= seedTotal),
         statusUpdatedAt: onChain?.updated_at || null,
-        statusFresh,
+        statusFresh: status.statusFresh,
+        statusUsable: status.statusUsable,
+        statusAgeMinutes: status.statusAgeMinutes,
+        workerHealth: status.workerHealth,
         source: onChain ? 'treasury_status' : 'unknown',
       })
     }
@@ -699,12 +725,11 @@ Deno.serve(async (req) => {
         const spendable = onChain
           ? Number(onChain.spendable_after_reserves || 0)
           : Math.max(0, onChainBalance - pendingWithdrawals - pendingSeeds)
-        const statusAgeMs = onChain?.updated_at ? Date.now() - new Date(String(onChain.updated_at)).getTime() : null
-        const statusFresh = statusAgeMs != null && statusAgeMs < 15 * 60_000
+        const status = treasuryStatusMeta(onChain?.updated_at)
 
-        if (!onChain || !statusFresh) {
+        if (!onChain || !status.statusUsable) {
           throw new Error(
-            'Treasury on-chain balance is unknown or stale. Run the treasury worker (GitHub Actions) '
+            'Treasury on-chain balance is unknown or too stale (>3h). Run the treasury worker (GitHub Actions) '
             + 'and ensure @sphere-predict has spendable UCT before creating markets.',
           )
         }

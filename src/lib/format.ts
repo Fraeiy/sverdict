@@ -29,6 +29,31 @@ export function noProbability(m: Market) {
   return 100 - yesProbability(m)
 }
 
+/** Human-readable age since an ISO timestamp (e.g. "67m ago"). */
+export function formatAge(iso: string | null | undefined, now = Date.now()) {
+  if (!iso) return 'never'
+  const ms = now - new Date(iso).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return 'just now'
+  const mins = Math.floor(ms / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  const rem = mins % 60
+  if (hrs < 24) return rem > 0 ? `${hrs}h ${rem}m ago` : `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
+export type WorkerHealth = 'ok' | 'delayed' | 'stale' | 'unknown'
+
+/** Treasury worker freshness from last treasury_status publish. */
+export function workerHealthFromAge(ageMs: number | null): WorkerHealth {
+  if (ageMs == null || !Number.isFinite(ageMs)) return 'unknown'
+  if (ageMs < 20 * 60_000) return 'ok'
+  if (ageMs < 120 * 60_000) return 'delayed'
+  return 'stale'
+}
+
 export function timeRemaining(deadline: string) {
   const d = new Date(deadline).getTime() - Date.now()
   if (d < 0) return 'Ended'

@@ -163,6 +163,9 @@ export async function adminTreasurySeed(auth: AuthHeaders) {
     canCreateMarket: boolean
     statusUpdatedAt: string | null
     statusFresh: boolean
+    statusUsable: boolean
+    statusAgeMinutes: number | null
+    workerHealth: 'ok' | 'delayed' | 'stale' | 'unknown'
     source: string
   }>('/admin/treasury-seed', { auth })
 }

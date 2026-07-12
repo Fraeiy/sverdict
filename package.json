@@ -23,6 +23,7 @@
     "treasury:worker:dry-run": "node backend/treasury-worker.mjs --dry-run",
     "treasury:worker:status": "node backend/treasury-worker.mjs --status",
     "treasury:ci-loop": "node backend/scripts/treasury-ci-loop.mjs",
+    "treasury:trigger": "node scripts/trigger-treasury-dispatch.mjs",
     "dm:worker": "node backend/dm-worker.mjs",
     "dm:worker:dry-run": "node backend/dm-worker.mjs --dry-run",
     "lint": "eslint .",
