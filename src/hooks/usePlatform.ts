@@ -39,6 +39,11 @@ export function usePlatform(identity: WalletIdentity | null) {
     bootstrap().catch(() => setLoading(false))
   }, [bootstrap])
 
+  const treasurySeed = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminTreasurySeed(auth)
+  }, [auth])
+
   const createMarket = useCallback(async (payload: {
     question: string
     description?: string
@@ -82,6 +87,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     treasuryAddress,
     loading,
     isAdmin: !!user?.is_admin,
+    treasurySeed,
     createMarket,
     resolveMarket,
     closeMarket,
@@ -93,6 +99,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     auth,
     treasuryAddress,
     loading,
+    treasurySeed,
     createMarket,
     resolveMarket,
     closeMarket,

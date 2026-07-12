@@ -17,6 +17,7 @@ export const fetchHistory = impl.fetchHistory
 export const deposit = impl.deposit
 export const withdraw = impl.withdraw
 export const placeTrade = impl.placeTrade
+export const adminTreasurySeed = impl.adminTreasurySeed
 export const adminCreateMarket = impl.adminCreateMarket
 export const adminCloseMarket = impl.adminCloseMarket
 export const adminResolveMarket = impl.adminResolveMarket

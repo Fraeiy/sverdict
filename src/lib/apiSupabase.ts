@@ -21,7 +21,14 @@ async function invoke<T>(route: string, init?: { method?: string; payload?: unkn
   })
   const payload = data as { error?: string } | null
   if (error) {
-    const msg = payload?.error || error.message || 'Supabase function error'
+    let msg = payload?.error || error.message || 'Supabase function error'
+    const ctx = (error as { context?: Response }).context
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const body = await ctx.json() as { error?: string }
+        if (body?.error) msg = body.error
+      } catch { /* use message above */ }
+    }
     const hint = msg.includes('Not found') || error.message?.includes('404')
       ? ' — run npm run supabase:deploy'
       : ''
@@ -132,6 +139,15 @@ export async function placeTrade(
     auth,
     payload: { ...payload, side: payload.outcome },
   })
+}
+
+export async function adminTreasurySeed(auth: AuthHeaders) {
+  return invoke<{
+    treasuryUserId: string
+    availableBalance: number
+    seedPerMarket: number
+    canCreateMarket: boolean
+  }>('/admin/treasury-seed', { auth })
 }
 
 export async function adminCreateMarket(

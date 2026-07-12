@@ -90,6 +90,15 @@ export async function placeTrade(
   })
 }
 
+export async function adminTreasurySeed(_auth: AuthHeaders) {
+  return {
+    treasuryUserId: '',
+    availableBalance: 1000,
+    seedPerMarket: 100,
+    canCreateMarket: true,
+  }
+}
+
 export async function adminCreateMarket(
   auth: AuthHeaders,
   payload: { question: string; description?: string; resolutionCriteria?: string; category: string; daysOpen: number },

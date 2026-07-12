@@ -145,16 +145,36 @@ async function notify(db: SupabaseClient, userId: string, type: string, title: s
   await db.from('notifications').insert({ user_id: userId, type, title, body, metadata })
 }
 
+function isTreasuryUser(u: { nametag?: string | null; wallet_address?: string }) {
+  return (u.nametag || '').replace(/^@/, '').toLowerCase() === 'sphere-predict'
+    || isAdminWallet(u.nametag)
+    || isAdminWallet(u.wallet_address)
+}
+
 function resolveTreasuryUserId(
   users: { id: string; nametag?: string | null; wallet_address?: string; is_admin?: boolean }[],
   fallbackUserId: string,
 ) {
-  const treasury = users.find(u =>
-    (u.nametag || '').replace(/^@/, '').toLowerCase() === 'sphere-predict' ||
-    isAdminWallet(u.nametag) ||
-    isAdminWallet(u.wallet_address),
-  )
+  const treasury = users.find(isTreasuryUser)
   return treasury?.id || fallbackUserId
+}
+
+/** Ledger row for @sphere-predict — funds 50/50 market seed liquidity. */
+async function ensureTreasuryUser(db: SupabaseClient) {
+  const { data: users } = await db.from('users').select('id, nametag, wallet_address, is_admin')
+  let treasury = (users || []).find(isTreasuryUser)
+  if (!treasury) {
+    const { data, error } = await db.from('users').insert({
+      wallet_address: '@sphere-predict',
+      nametag: 'sphere-predict',
+      is_admin: true,
+    }).select('id, nametag, wallet_address, is_admin').single()
+    if (error) throw error
+    treasury = data
+    const { error: balErr } = await db.from('balances').insert({ user_id: treasury.id, available_balance: 0 })
+    if (balErr && !balErr.message.includes('duplicate')) throw balErr
+  }
+  return treasury
 }
 
 function marketSeedAmounts() {
@@ -604,19 +624,33 @@ Deno.serve(async (req) => {
     const admin = user.is_admin || isAdminWallet(walletAddress) || isAdminWallet(nametag)
     if (!admin) return json({ error: 'Admin access required' }, 403)
 
+    if (route === '/admin/treasury-seed') {
+      const treasury = await ensureTreasuryUser(db)
+      const bal = await getBalance(db, treasury.id)
+      const { seedTotal } = marketSeedAmounts()
+      return json({
+        treasuryUserId: treasury.id,
+        availableBalance: bal,
+        seedPerMarket: seedTotal,
+        canCreateMarket: seedTotal <= 0 || bal >= seedTotal,
+      })
+    }
+
     if (route === '/admin/markets' && req.method === 'POST') {
       const question = String(payload.question || '').trim()
       if (!question) throw new Error('Market question is required')
 
       const { seedTotal, seedPerSide } = marketSeedAmounts()
-      const { data: allUsers } = await db.from('users').select('id, nametag, wallet_address, is_admin')
-      const treasuryUserId = resolveTreasuryUserId(allUsers || [], user.id)
+      const treasury = await ensureTreasuryUser(db)
+      const treasuryUserId = treasury.id
 
       if (seedTotal > 0) {
         const bal = await getBalance(db, treasuryUserId)
         if (bal < seedTotal) {
           throw new Error(
-            `Treasury portfolio needs at least ${seedTotal} UCT to seed liquidity (50/50 YES/NO). Current: ${bal.toFixed(2)} UCT.`,
+            `Treasury seed fund needs at least ${seedTotal} UCT (50/50 YES/NO per market). `
+            + `Current @sphere-predict ledger: ${bal.toFixed(2)} UCT. `
+            + `Top up the treasury seed balance in Supabase (balances row for @sphere-predict) or run migration 013.`,
           )
         }
       }

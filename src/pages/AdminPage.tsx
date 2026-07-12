@@ -51,6 +51,8 @@ export function AdminPage({ platform, onToast }: Props) {
   const [showManual, setShowManual] = useState(false)
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
   const [fulfillingId, setFulfillingId] = useState<string | null>(null)
+  const [seedBalance, setSeedBalance] = useState<number | null>(null)
+  const [seedPerMarket, setSeedPerMarket] = useState(100)
 
   const onToastRef = useRef(onToast)
   onToastRef.current = onToast
@@ -117,12 +119,27 @@ export function AdminPage({ platform, onToast }: Props) {
     load({ trending: true }).catch(() => {})
   }, [load])
 
+  const loadTreasurySeed = useCallback(async () => {
+    if (!platform.isAdmin) return
+    try {
+      const s = await platform.treasurySeed()
+      setSeedBalance(s.availableBalance)
+      setSeedPerMarket(s.seedPerMarket)
+    } catch {
+      setSeedBalance(null)
+    }
+  }, [platform])
+
   useEffect(() => {
     if (!platform.isAdmin) return
     loadQueue().catch(() => {})
-    const interval = setInterval(() => loadQueue().catch(() => {}), 30_000)
+    loadTreasurySeed().catch(() => {})
+    const interval = setInterval(() => {
+      loadQueue().catch(() => {})
+      loadTreasurySeed().catch(() => {})
+    }, 30_000)
     return () => clearInterval(interval)
-  }, [platform.isAdmin, loadQueue])
+  }, [platform.isAdmin, loadQueue, loadTreasurySeed])
 
   async function createMarket() {
     if (!question.trim()) {
@@ -141,6 +158,7 @@ export function AdminPage({ platform, onToast }: Props) {
       setDescription('')
       setCriteria('')
       await load({ trending: true })
+      await loadTreasurySeed()
       onToast('Market created')
     } catch (e) {
       onToast(e instanceof Error ? e.message : 'Failed to create market', 'error')
@@ -294,8 +312,16 @@ export function AdminPage({ platform, onToast }: Props) {
       <div className="card mt-8 p-6">
         <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Create market</h2>
         <p className="mb-4 text-sm text-[var(--color-text-2)]">
-          Each new market seeds <strong className="text-[var(--color-gold)]">100 UCT</strong> from the @sphere-predict treasury portfolio — 50 YES / 50 NO — so odds start at 50% with real liquidity.
+          Each new market seeds <strong className="text-[var(--color-gold)]">{seedPerMarket} UCT</strong> from the @sphere-predict treasury seed ledger — 50 YES / 50 NO — so odds start at 50% with real liquidity.
         </p>
+        {seedBalance != null && (
+          <p className={`mb-4 font-data text-[11px] ${seedBalance < seedPerMarket ? 'text-[var(--color-no)]' : 'text-[var(--color-muted)]'}`}>
+            Treasury seed available: <span className="font-bold text-[var(--color-gold)]">{fmtUct(seedBalance)}</span>
+            {seedBalance < seedPerMarket && (
+              <> — need at least {fmtUct(seedPerMarket)}. Run migration 013 or top up the @sphere-predict balance row in Supabase.</>
+            )}
+          </p>
+        )}
         <div className="space-y-4">
           <input
             value={question}
