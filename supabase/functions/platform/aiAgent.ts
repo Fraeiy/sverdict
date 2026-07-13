@@ -1,6 +1,9 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const MODEL = Deno.env.get('XAI_MODEL') ?? 'grok-4.5'
+/** Free-tier default — override with OPENROUTER_MODEL secret. */
+const DEFAULT_MODEL = 'google/gemma-2-9b-it:free'
+const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? DEFAULT_MODEL
+const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sphere-predict.vercel.app'
 
 export type AiMarketProposal = {
   question: string
@@ -18,40 +21,56 @@ export type AiSettlementReview = {
   reason: string
 }
 
-async function askGrok(system: string, user: string) {
-  const key = Deno.env.get('XAI_API_KEY')
+function parseJsonResponse(text: string) {
+  const trimmed = text.trim()
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+    if (fenced?.[1]) return JSON.parse(fenced[1].trim())
+    const start = trimmed.indexOf('{')
+    const end = trimmed.lastIndexOf('}')
+    if (start >= 0 && end > start) return JSON.parse(trimmed.slice(start, end + 1))
+    throw new Error('Model did not return valid JSON')
+  }
+}
+
+async function askOpenRouter(system: string, user: string) {
+  const key = Deno.env.get('OPENROUTER_API_KEY')
   if (!key) {
     throw new Error(
-      'AI suggestions not configured — add XAI_API_KEY to Supabase Edge Function secrets (Dashboard → Edge Functions → platform → Secrets)',
+      'AI suggestions not configured — add OPENROUTER_API_KEY to Supabase Edge Function secrets '
+      + '(Dashboard → Edge Functions → platform → Secrets)',
     )
   }
 
-  const res = await fetch('https://api.x.ai/v1/chat/completions', {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
+      'HTTP-Referer': SITE_URL,
+      'X-Title': 'sphere//predict',
     },
     body: JSON.stringify({
       model: MODEL,
       temperature: 0.2,
       messages: [
-        { role: 'system', content: system },
+        { role: 'system', content: system + ' Reply with ONLY valid JSON, no markdown.' },
         { role: 'user', content: user },
       ],
-      response_format: { type: 'json_object' },
     }),
   })
 
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`xAI HTTP ${res.status}: ${body.slice(0, 300)}`)
+    throw new Error(`OpenRouter HTTP ${res.status}: ${body.slice(0, 300)}`)
   }
 
   const data = await res.json()
   const text = data?.choices?.[0]?.message?.content
   if (!text) throw new Error('Empty AI response')
-  return JSON.parse(text)
+  return parseJsonResponse(text)
 }
 
 export async function fetchAiMarketProposals(db: SupabaseClient) {
@@ -60,7 +79,7 @@ export async function fetchAiMarketProposals(db: SupabaseClient) {
     .order('created_at', { ascending: false })
     .limit(12)
 
-  const result = await askGrok(
+  const result = await askOpenRouter(
     'You are a prediction market editor for sphere//predict on Sphere/Unicity. '
     + 'Return JSON: {"markets":[{"question","description","resolutionCriteria","category","daysOpen"}]}. '
     + 'Categories: CRYPTO,SPORTS,POLITICS,TECH,FINANCE,OTHER. daysOpen 3-14. Criteria must be objective and verifiable.',
@@ -75,6 +94,7 @@ export async function fetchAiMarketProposals(db: SupabaseClient) {
     proposals: markets.filter(m => m.question && m.resolutionCriteria),
     advisory: true,
     model: MODEL,
+    provider: 'openrouter',
   }
 }
 
@@ -88,10 +108,10 @@ export async function fetchAiSettlementReviews(db: SupabaseClient) {
     .limit(10)
 
   if (!markets?.length) {
-    return { reviews: [] as AiSettlementReview[], advisory: true, model: MODEL }
+    return { reviews: [] as AiSettlementReview[], advisory: true, model: MODEL, provider: 'openrouter' }
   }
 
-  const result = await askGrok(
+  const result = await askOpenRouter(
     'You review prediction markets for sphere//predict. '
     + 'Return JSON: {"reviews":[{"marketId","resolution":"YES"|"NO"|"UNCLEAR","confidence":0-1,"reason"}]}. '
     + 'marketId must match input ids. Only YES/NO when criteria clearly met; otherwise UNCLEAR.',
@@ -112,5 +132,5 @@ export async function fetchAiSettlementReviews(db: SupabaseClient) {
     reason: String(r.reason || ''),
   }))
 
-  return { reviews, advisory: true, model: MODEL }
+  return { reviews, advisory: true, model: MODEL, provider: 'openrouter' }
 }

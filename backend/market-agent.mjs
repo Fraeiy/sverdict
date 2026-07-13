@@ -1,10 +1,11 @@
 /**
  * AI market agent (dry-run by default) — proposes new markets and settlement hints.
  *
- * Uses xAI Grok via OpenAI-compatible API. Never auto-executes without --apply.
+ * Uses OpenRouter (free models available). Advisory only — no auto-execute.
  *
  * Env:
- *   XAI_API_KEY
+ *   OPENROUTER_API_KEY
+ *   OPENROUTER_MODEL (optional, default google/gemma-2-9b-it:free)
  *   SUPABASE_URL / VITE_SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
  *
@@ -16,45 +17,17 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
+import { askOpenRouter, openRouterModel } from './lib/openRouter.mjs'
 
 loadProjectEnv()
 
 const PROPOSE = process.argv.includes('--propose')
 const SETTLE = process.argv.includes('--settle')
-const MODEL = process.env.XAI_MODEL || 'grok-4.5'
 
 function requireEnv(name) {
   const v = process.env[name]
   if (!v) throw new Error(`Missing env: ${name}`)
   return v
-}
-
-async function askGrok(system, user) {
-  const key = requireEnv('XAI_API_KEY')
-  const res = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      response_format: { type: 'json_object' },
-    }),
-  })
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`xAI HTTP ${res.status}: ${body.slice(0, 400)}`)
-  }
-  const data = await res.json()
-  const text = data?.choices?.[0]?.message?.content
-  if (!text) throw new Error('Empty model response')
-  return JSON.parse(text)
 }
 
 async function proposeMarkets(db) {
@@ -68,7 +41,7 @@ async function proposeMarkets(db) {
     want: 3,
   }
 
-  const result = await askGrok(
+  const result = await askOpenRouter(
     'You are a prediction market editor for sphere//predict on Sphere/Unicity. '
     + 'Return JSON: {"markets":[{"question","description","resolutionCriteria","category","daysOpen"}]}. '
     + 'Categories: CRYPTO,SPORTS,POLITICS,TECH,FINANCE,OTHER. daysOpen 3-14. Criteria must be objective.',
@@ -98,7 +71,7 @@ async function reviewSettlements(db) {
     return []
   }
 
-  const result = await askGrok(
+  const result = await askOpenRouter(
     'You review prediction markets for sphere//predict. '
     + 'Return JSON: {"reviews":[{"marketId","resolution":"YES"|"NO"|"UNCLEAR","confidence":0-1,"reason"}]}. '
     + 'Only YES/NO when criteria clearly met; otherwise UNCLEAR.',

@@ -494,7 +494,7 @@ export function AdminPage({ platform, onToast }: Props) {
           <div>
             <h2 className="text-lg font-semibold">AI suggestions</h2>
             <p className="mt-1 text-sm text-[var(--color-text-2)]">
-              Advisory only — Grok proposes markets and settlement hints. You approve every action manually.
+              Advisory only — OpenRouter AI proposes markets and settlement hints. You approve every action manually.
             </p>
           </div>
         </div>
