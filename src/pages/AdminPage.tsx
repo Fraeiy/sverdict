@@ -46,7 +46,7 @@ const STATUS_CHIP: Record<string, string> = {
 
 type Props = {
   platform: PlatformApi
-  onToast: (msg: string, type?: 'success' | 'error') => void
+  onToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }
 
 export function AdminPage({ platform, onToast }: Props) {

@@ -1,8 +1,11 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-/** Free-tier default — override with OPENROUTER_MODEL secret. */
-const DEFAULT_MODEL = 'google/gemma-2-9b-it:free'
-const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? DEFAULT_MODEL
+const FALLBACK_MODELS = [
+  'google/gemma-2-9b-it:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'qwen/qwen-2-7b-instruct:free',
+]
+const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? FALLBACK_MODELS[0]
 const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sphere-predict.vercel.app'
 
 export type AiMarketProposal = {
@@ -35,15 +38,7 @@ function parseJsonResponse(text: string) {
   }
 }
 
-async function askOpenRouter(system: string, user: string) {
-  const key = Deno.env.get('OPENROUTER_API_KEY')
-  if (!key) {
-    throw new Error(
-      'AI suggestions not configured — add OPENROUTER_API_KEY to Supabase Edge Function secrets '
-      + '(Dashboard → Edge Functions → platform → Secrets)',
-    )
-  }
-
+async function askOpenRouterOnce(model: string, key: string, system: string, user: string) {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -53,7 +48,7 @@ async function askOpenRouter(system: string, user: string) {
       'X-Title': 'sphere//predict',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       temperature: 0.2,
       messages: [
         { role: 'system', content: system + ' Reply with ONLY valid JSON, no markdown.' },
@@ -64,13 +59,37 @@ async function askOpenRouter(system: string, user: string) {
 
   if (!res.ok) {
     const body = await res.text()
-    throw new Error(`OpenRouter HTTP ${res.status}: ${body.slice(0, 300)}`)
+    throw new Error(`OpenRouter ${model} HTTP ${res.status}: ${body.slice(0, 200)}`)
   }
 
   const data = await res.json()
   const text = data?.choices?.[0]?.message?.content
-  if (!text) throw new Error('Empty AI response')
+  if (!text) throw new Error(`Empty AI response from ${model}`)
   return parseJsonResponse(text)
+}
+
+async function askOpenRouter(system: string, user: string) {
+  const key = Deno.env.get('OPENROUTER_API_KEY')
+  if (!key) {
+    throw new Error(
+      'AI suggestions not configured — add OPENROUTER_API_KEY to Supabase Edge Function secrets '
+      + '(Dashboard → Edge Functions → platform → Secrets)',
+    )
+  }
+
+  const models = Deno.env.get('OPENROUTER_MODEL')
+    ? [Deno.env.get('OPENROUTER_MODEL')!]
+    : FALLBACK_MODELS
+
+  let lastErr: Error | null = null
+  for (const model of models) {
+    try {
+      return await askOpenRouterOnce(model, key, system, user)
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+    }
+  }
+  throw lastErr ?? new Error('All OpenRouter models failed')
 }
 
 export async function fetchAiMarketProposals(db: SupabaseClient) {
