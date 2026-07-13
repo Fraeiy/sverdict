@@ -1,16 +1,31 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ShareSheet } from '../share/ShareSheet'
 import type { Market } from '../../lib/types'
+import { marketShareText, marketShareUrl } from '../../lib/share'
 import { fmtUct, noProbability, timeRemaining, yesProbability } from '../../lib/format'
 
 export function MarketCard({ market }: { market: Market }) {
-  const yes = yesProbability(market)
-  const no = noProbability(market)
+  const [shareOpen, setShareOpen] = useState(false)
   const trending = market.trending_score > 50
 
+  const yes = yesProbability(market)
+  const no = noProbability(market)
+
   return (
+    <>
+    <div className="card card-hover card-glow group relative p-5">
+      <button
+        type="button"
+        onClick={() => setShareOpen(true)}
+        className="btn-ghost absolute right-3 top-3 z-10 rounded-md px-2 py-1 font-data text-[9px] font-bold uppercase tracking-wider sm:opacity-0 sm:transition sm:group-hover:opacity-100"
+        aria-label="Share market"
+      >
+        Share
+      </button>
     <Link
       to={`/markets/${market.id}`}
-      className="card card-hover card-glow group block p-5"
+      className="block"
     >
       <div className="mb-3 flex items-center gap-2">
         <span className={`chip ${
@@ -43,5 +58,19 @@ export function MarketCard({ market }: { market: Market }) {
         <span>{timeRemaining(market.deadline)}</span>
       </div>
     </Link>
+    </div>
+
+    <ShareSheet
+      open={shareOpen}
+      title="Share market"
+      shareText={marketShareText(market)}
+      shareUrl={marketShareUrl(market.id)}
+      onClose={() => setShareOpen(false)}
+      card={{
+        headline: market.question,
+        subline: `YES ${yes}% · NO ${no}% · ${timeRemaining(market.deadline)}`,
+      }}
+    />
+    </>
   )
 }

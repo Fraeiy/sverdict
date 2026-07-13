@@ -1,4 +1,4 @@
-# Sphere Predict
+# sphere//predict
 
 Prediction markets on [Unicity Sphere](https://sphere.unicity.network) testnet. Users connect a Sphere wallet, deposit UCT into a portfolio margin account, trade YES/NO positions instantly, and withdraw back to their wallet.
 

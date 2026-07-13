@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { SharedPositionBanner } from '../components/share/SharedPositionBanner'
+import { ShareSheet } from '../components/share/ShareSheet'
 import { TradeConfirmModal } from '../components/ui/TradeConfirmModal'
 import { useMarket } from '../hooks/useMarket'
 import { usePositions } from '../hooks/usePositions'
 import { useUserSettings } from '../hooks/useUserSettings'
 import type { Outcome } from '../lib/types'
 import { loadCachedPreferences } from '../lib/userSettings'
+import { marketShareText, marketShareUrl, parsePositionShareParams } from '../lib/share'
 import { fmtUct, noProbability, timeRemaining, yesProbability } from '../lib/format'
 
 type Props = {
@@ -15,6 +18,7 @@ type Props = {
 
 export function MarketDetailPage({ identity, onToast }: Props) {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { market, loading: marketLoading, error: marketError, oddsUpdated, isLive } = useMarket(id)
   const { placeTrade, availableBalance, refresh } = usePositions(identity)
@@ -23,7 +27,9 @@ export function MarketDetailPage({ identity, onToast }: Props) {
   const [amount, setAmount] = useState(() => String(loadCachedPreferences().defaultStake))
   const [loading, setLoading] = useState<Outcome | null>(null)
   const [confirmOutcome, setConfirmOutcome] = useState<Outcome | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   const stakeInitialized = useRef(false)
+  const sharedPosition = useMemo(() => parsePositionShareParams(searchParams), [searchParams])
 
   useEffect(() => {
     if (marketError) onToast('Market not found', 'error')
@@ -98,9 +104,22 @@ export function MarketDetailPage({ identity, onToast }: Props) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <Link to="/" className="mb-6 inline-flex font-data text-[11px] text-[var(--color-muted)] transition hover:text-[var(--color-gold)]">
-        ← MARKETS
-      </Link>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <Link to="/" className="inline-flex font-data text-[11px] text-[var(--color-muted)] transition hover:text-[var(--color-gold)]">
+          ← MARKETS
+        </Link>
+        <button
+          type="button"
+          onClick={() => setShareOpen(true)}
+          className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] font-bold uppercase tracking-wider"
+        >
+          Share market
+        </button>
+      </div>
+
+      {sharedPosition && (
+        <SharedPositionBanner params={sharedPosition} question={market.question} />
+      )}
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <span className="chip chip-neutral">{market.category}</span>
@@ -257,6 +276,19 @@ export function MarketDetailPage({ identity, onToast }: Props) {
           </Link>
         </div>
       )}
+
+      <ShareSheet
+        open={shareOpen}
+        title="Share market"
+        shareText={marketShareText(market)}
+        shareUrl={marketShareUrl(market.id)}
+        onClose={() => setShareOpen(false)}
+        onCopied={() => onToast('Market link copied', 'success')}
+        card={{
+          headline: market.question,
+          subline: `YES ${yes}% · NO ${no}% · ${timeRemaining(market.deadline)}`,
+        }}
+      />
     </div>
   )
 }

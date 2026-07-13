@@ -3,6 +3,7 @@ import { useNotifications } from '../hooks/useNotifications'
 import { usePlatform } from '../hooks/usePlatform'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { getBackendMode } from '../lib/config'
+import { BRAND_NAME } from '../lib/brand'
 import { displayName } from '../lib/format'
 import { clearConnectSession } from '../lib/userSettings'
 import type { WalletIdentity } from '../lib/types'
@@ -295,7 +296,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
           <div className="space-y-3 text-sm text-[var(--color-text-2)]">
             <div className="flex justify-between gap-4">
               <span className="text-[var(--color-muted)]">App</span>
-              <span className="font-data font-bold text-[var(--color-text)]">Sphere Predict</span>
+              <span className="font-data font-bold text-[var(--color-text)]">{BRAND_NAME}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-[var(--color-muted)]">Network</span>

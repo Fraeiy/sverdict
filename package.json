@@ -24,6 +24,8 @@
     "treasury:worker:status": "node backend/treasury-worker.mjs --status",
     "treasury:trigger": "node scripts/trigger-treasury-dispatch.mjs",
     "treasury:schedule-install": "powershell -ExecutionPolicy Bypass -File scripts/install-treasury-scheduler.ps1",
+    "market:agent:propose": "node backend/market-agent.mjs --propose",
+    "market:agent:settle": "node backend/market-agent.mjs --settle",
     "dm:worker": "node backend/dm-worker.mjs",
     "dm:worker:dry-run": "node backend/dm-worker.mjs --dry-run",
     "lint": "eslint .",

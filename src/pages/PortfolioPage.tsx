@@ -183,7 +183,14 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {openPositions.slice(0, 3).map(p => <PositionCard key={p.id} position={p} />)}
+                  {openPositions.slice(0, 3).map(p => (
+                    <PositionCard
+                      key={p.id}
+                      position={p}
+                      trader={identity?.nametag || identity?.directAddress}
+                      onShared={() => onToast('Position link copied', 'success')}
+                    />
+                  ))}
                 </div>
               )}
             </section>
@@ -200,7 +207,14 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {openPositions.map(p => <PositionCard key={p.id} position={p} />)}
+                  {openPositions.map(p => (
+                    <PositionCard
+                      key={p.id}
+                      position={p}
+                      trader={identity?.nametag || identity?.directAddress}
+                      onShared={() => onToast('Position link copied', 'success')}
+                    />
+                  ))}
                 </div>
               )}
             </section>
