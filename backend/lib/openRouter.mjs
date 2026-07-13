@@ -1,4 +1,9 @@
-const DEFAULT_MODEL = 'google/gemma-2-9b-it:free'
+const DEFAULT_MODEL = 'openrouter/free'
+const FALLBACK_MODELS = [
+  'openrouter/free',
+  'google/gemma-4-26b-a4b-it:free',
+  'liquid/lfm-2.5-1.2b-instruct:free',
+]
 const SITE_URL = process.env.OPENROUTER_SITE_URL || 'https://sphere-predict.vercel.app'
 
 export function openRouterModel() {
@@ -23,31 +28,43 @@ export async function askOpenRouter(system, user) {
   const key = process.env.OPENROUTER_API_KEY
   if (!key) throw new Error('Missing OPENROUTER_API_KEY')
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': SITE_URL,
-      'X-Title': 'sphere//predict',
-    },
-    body: JSON.stringify({
-      model: openRouterModel(),
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: `${system} Reply with ONLY valid JSON, no markdown.` },
-        { role: 'user', content: user },
-      ],
-    }),
-  })
+  const models = process.env.OPENROUTER_MODEL
+    ? [process.env.OPENROUTER_MODEL]
+    : FALLBACK_MODELS
 
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`OpenRouter HTTP ${res.status}: ${body.slice(0, 400)}`)
+  let lastErr = null
+  for (const model of models) {
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': SITE_URL,
+          'X-Title': 'sphere//predict',
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          messages: [
+            { role: 'system', content: `${system} Reply with ONLY valid JSON, no markdown.` },
+            { role: 'user', content: user },
+          ],
+        }),
+      })
+
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(`OpenRouter ${model} HTTP ${res.status}: ${body.slice(0, 300)}`)
+      }
+
+      const data = await res.json()
+      const text = data?.choices?.[0]?.message?.content
+      if (!text) throw new Error(`Empty response from ${model}`)
+      return parseJsonResponse(text)
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+    }
   }
-
-  const data = await res.json()
-  const text = data?.choices?.[0]?.message?.content
-  if (!text) throw new Error('Empty model response')
-  return parseJsonResponse(text)
+  throw lastErr ?? new Error('All OpenRouter models failed')
 }

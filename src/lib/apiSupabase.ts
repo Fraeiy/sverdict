@@ -23,11 +23,17 @@ async function invoke<T>(route: string, init?: { method?: string; payload?: unkn
   if (error) {
     let msg = payload?.error || error.message || 'Supabase function error'
     const ctx = (error as { context?: Response }).context
-    if (ctx && typeof ctx.json === 'function') {
+    if (ctx) {
       try {
-        const body = await ctx.json() as { error?: string }
+        const body = await ctx.clone().json() as { error?: string }
         if (body?.error) msg = body.error
-      } catch { /* use message above */ }
+      } catch {
+        try {
+          const text = await ctx.text()
+          const parsed = JSON.parse(text) as { error?: string }
+          if (parsed?.error) msg = parsed.error
+        } catch { /* use message above */ }
+      }
     }
     const hint = msg.includes('Not found') || error.message?.includes('404')
       ? ' — run npm run supabase:deploy'

@@ -79,6 +79,7 @@ export function AdminPage({ platform, onToast }: Props) {
   const [aiProposals, setAiProposals] = useState<AiMarketProposal[]>([])
   const [aiSettlements, setAiSettlements] = useState<AiSettlementReview[]>([])
   const [aiLoading, setAiLoading] = useState<'proposals' | 'settlements' | null>(null)
+  const aiBusy = aiLoading !== null
   const [aiError, setAiError] = useState<string | null>(null)
 
   const onToastRef = useRef(onToast)
@@ -176,6 +177,7 @@ export function AdminPage({ platform, onToast }: Props) {
   useVisibleInterval(() => { loadDashboard().catch(() => {}) }, 30_000, platform.isAdmin)
 
   async function loadAiProposals() {
+    if (aiBusy) return
     setAiLoading('proposals')
     setAiError(null)
     try {
@@ -192,6 +194,7 @@ export function AdminPage({ platform, onToast }: Props) {
   }
 
   async function loadAiSettlements() {
+    if (aiBusy) return
     setAiLoading('settlements')
     setAiError(null)
     try {
@@ -515,7 +518,7 @@ export function AdminPage({ platform, onToast }: Props) {
                 disabled={aiLoading === 'proposals'}
                 className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
               >
-                {aiLoading === 'proposals' ? 'Thinking…' : 'Get suggestions'}
+                {aiLoading === 'proposals' ? 'Thinking… (15–60s)' : 'Get suggestions'}
               </button>
             </div>
             {aiProposals.length === 0 ? (

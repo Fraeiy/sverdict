@@ -1,9 +1,10 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+/** openrouter/free auto-picks an available free model (old gemma-2-9b IDs are 404). */
 const FALLBACK_MODELS = [
-  'google/gemma-2-9b-it:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'qwen/qwen-2-7b-instruct:free',
+  'openrouter/free',
+  'google/gemma-4-26b-a4b-it:free',
+  'liquid/lfm-2.5-1.2b-instruct:free',
 ]
 const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? FALLBACK_MODELS[0]
 const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sphere-predict.vercel.app'
