@@ -108,6 +108,14 @@ const REST_TREASURY_STUB = {
   source: 'rest',
 }
 
+export async function adminAiProposals(_auth: AuthHeaders) {
+  return { proposals: [], advisory: true, model: 'rest' }
+}
+
+export async function adminAiSettlements(_auth: AuthHeaders) {
+  return { reviews: [], advisory: true, model: 'rest' }
+}
+
 export async function adminDashboard(_auth: AuthHeaders) {
   return {
     treasury: REST_TREASURY_STUB,

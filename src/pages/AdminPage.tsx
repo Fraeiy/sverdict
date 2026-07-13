@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMarkets } from '../hooks/useMarkets'
 import type { PlatformApi } from '../hooks/usePlatform'
+import type { AiMarketProposal, AiSettlementReview } from '../lib/apiSupabase'
 import { useVisibleInterval } from '../hooks/useVisibleInterval'
 import { fmtUct, formatAge, timeRemaining, type WorkerHealth } from '../lib/format'
 
@@ -75,6 +76,10 @@ export function AdminPage({ platform, onToast }: Props) {
   const [seedCounts, setSeedCounts] = useState<Record<string, number>>({})
   const [recentSeeds, setRecentSeeds] = useState<SeedQueueRow[]>([])
   const [seedQueueLoading, setSeedQueueLoading] = useState(false)
+  const [aiProposals, setAiProposals] = useState<AiMarketProposal[]>([])
+  const [aiSettlements, setAiSettlements] = useState<AiSettlementReview[]>([])
+  const [aiLoading, setAiLoading] = useState<'proposals' | 'settlements' | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const onToastRef = useRef(onToast)
   onToastRef.current = onToast
@@ -169,6 +174,48 @@ export function AdminPage({ platform, onToast }: Props) {
   }, [load])
 
   useVisibleInterval(() => { loadDashboard().catch(() => {}) }, 30_000, platform.isAdmin)
+
+  async function loadAiProposals() {
+    setAiLoading('proposals')
+    setAiError(null)
+    try {
+      const { proposals } = await platform.aiProposals()
+      setAiProposals(proposals || [])
+      if (!proposals?.length) onToast('No new market proposals from AI', 'info')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'AI proposals failed'
+      setAiError(msg)
+      onToast(msg, 'error')
+    } finally {
+      setAiLoading(null)
+    }
+  }
+
+  async function loadAiSettlements() {
+    setAiLoading('settlements')
+    setAiError(null)
+    try {
+      const { reviews } = await platform.aiSettlements()
+      setAiSettlements(reviews || [])
+      if (!reviews?.length) onToast('No markets need settlement review', 'info')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'AI settlement review failed'
+      setAiError(msg)
+      onToast(msg, 'error')
+    } finally {
+      setAiLoading(null)
+    }
+  }
+
+  function applyProposal(p: AiMarketProposal) {
+    setQuestion(p.question)
+    setDescription(p.description || '')
+    setCriteria(p.resolutionCriteria)
+    if (CATEGORIES.includes(p.category)) setCategory(p.category)
+    setDays(Math.min(14, Math.max(1, Number(p.daysOpen) || 7)))
+    onToast('Proposal loaded — review criteria, then create market')
+    document.getElementById('create-market')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   async function createMarket() {
     if (!question.trim()) {
@@ -442,7 +489,98 @@ export function AdminPage({ platform, onToast }: Props) {
         )}
       </div>
 
-      <div className="card mt-8 p-6">
+      <div className="card mt-8 border-[rgba(99,102,241,0.22)] p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">AI suggestions</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-2)]">
+              Advisory only — Grok proposes markets and settlement hints. You approve every action manually.
+            </p>
+          </div>
+        </div>
+
+        {aiError && (
+          <p className="mb-4 rounded-lg border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)] px-3 py-2 text-xs text-[var(--color-no)]">
+            {aiError}
+          </p>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="label-caps">Market proposals</p>
+              <button
+                type="button"
+                onClick={() => loadAiProposals()}
+                disabled={aiLoading === 'proposals'}
+                className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
+              >
+                {aiLoading === 'proposals' ? 'Thinking…' : 'Get suggestions'}
+              </button>
+            </div>
+            {aiProposals.length === 0 ? (
+              <p className="text-sm text-[var(--color-muted)]">Click Get suggestions to load 3 draft markets.</p>
+            ) : (
+              <div className="space-y-3">
+                {aiProposals.map((p, i) => (
+                  <div key={`${p.question}-${i}`} className="card p-4">
+                    <p className="font-medium">{p.question}</p>
+                    <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">{p.category} · {p.daysOpen}d</p>
+                    <p className="mt-2 line-clamp-2 text-xs text-[var(--color-text-2)]">{p.resolutionCriteria}</p>
+                    <button
+                      type="button"
+                      onClick={() => applyProposal(p)}
+                      className="btn-ghost mt-3 rounded-md px-3 py-1.5 font-data text-[10px]"
+                    >
+                      Use in form →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="label-caps">Settlement review</p>
+              <button
+                type="button"
+                onClick={() => loadAiSettlements()}
+                disabled={aiLoading === 'settlements'}
+                className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] disabled:opacity-50"
+              >
+                {aiLoading === 'settlements' ? 'Reviewing…' : 'Review overdue'}
+              </button>
+            </div>
+            {aiSettlements.length === 0 ? (
+              <p className="text-sm text-[var(--color-muted)]">Reviews markets past deadline — resolve manually below.</p>
+            ) : (
+              <div className="space-y-3">
+                {aiSettlements.map(r => (
+                  <div key={r.marketId} className="card p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="min-w-0 flex-1 font-medium">{r.question}</p>
+                      <span className={`chip ${
+                        r.resolution === 'YES' ? 'chip-yes' : r.resolution === 'NO' ? 'chip-no' : 'chip-gold'
+                      }`}>
+                        {r.resolution} {Math.round(r.confidence * 100)}%
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--color-text-2)]">{r.reason}</p>
+                    {r.resolution !== 'UNCLEAR' && r.confidence >= 0.85 && (
+                      <p className="mt-2 font-data text-[9px] text-[var(--color-muted)]">
+                        High confidence — still verify criteria, then Resolve below.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div id="create-market" className="card mt-8 p-6">
         <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Create market</h2>
         <p className="mb-4 text-sm text-[var(--color-text-2)]">
           Each new market requires <strong className="text-[var(--color-gold)]">{fmtUct(seedPerMarket)}</strong> on-chain from @sphere-predict — 50 YES / 50 NO pools activate after the treasury agent confirms the send.

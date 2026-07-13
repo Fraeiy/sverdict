@@ -71,6 +71,16 @@ export function usePlatform(identity: WalletIdentity | null) {
     return api.adminDashboard(auth)
   }, [auth])
 
+  const aiProposals = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminAiProposals(auth)
+  }, [auth])
+
+  const aiSettlements = useCallback(async () => {
+    if (!auth) throw new Error('Not connected')
+    return api.adminAiSettlements(auth)
+  }, [auth])
+
   const withdrawalQueue = useCallback(async () => {
     if (!auth) throw new Error('Not connected')
     return api.adminWithdrawalQueue(auth)
@@ -98,6 +108,8 @@ export function usePlatform(identity: WalletIdentity | null) {
     loading,
     isAdmin: !!user?.is_admin,
     adminDashboard,
+    aiProposals,
+    aiSettlements,
     treasurySeed,
     createMarket,
     resolveMarket,
@@ -112,6 +124,8 @@ export function usePlatform(identity: WalletIdentity | null) {
     treasuryAddress,
     loading,
     adminDashboard,
+    aiProposals,
+    aiSettlements,
     treasurySeed,
     createMarket,
     resolveMarket,

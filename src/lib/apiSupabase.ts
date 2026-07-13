@@ -168,6 +168,38 @@ export type AdminTreasurySummary = {
   source: string
 }
 
+export type AiMarketProposal = {
+  question: string
+  description?: string
+  resolutionCriteria: string
+  category: string
+  daysOpen: number
+}
+
+export type AiSettlementReview = {
+  marketId: string
+  question: string
+  resolution: 'YES' | 'NO' | 'UNCLEAR'
+  confidence: number
+  reason: string
+}
+
+export async function adminAiProposals(auth: AuthHeaders) {
+  return invoke<{
+    proposals: AiMarketProposal[]
+    advisory: boolean
+    model: string
+  }>('/admin/ai/proposals', { auth })
+}
+
+export async function adminAiSettlements(auth: AuthHeaders) {
+  return invoke<{
+    reviews: AiSettlementReview[]
+    advisory: boolean
+    model: string
+  }>('/admin/ai/settlements', { auth })
+}
+
 export async function adminDashboard(auth: AuthHeaders) {
   return invoke<{
     treasury: AdminTreasurySummary

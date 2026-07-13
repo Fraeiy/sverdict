@@ -7,6 +7,7 @@ import {
   buildStakeMemo,
   buildWithdrawMemo,
 } from './paymentMemos.ts'
+import { fetchAiMarketProposals, fetchAiSettlementReviews } from './aiAgent.ts'
 import { normalizeTreasuryStatusRow } from './treasuryAmount.ts'
 
 const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
@@ -744,6 +745,14 @@ Deno.serve(async (req) => {
         fetchMarketSeedQueue(db),
       ])
       return json({ treasury, withdrawals, seeds })
+    }
+
+    if (route === '/admin/ai/proposals') {
+      return json(await fetchAiMarketProposals(db))
+    }
+
+    if (route === '/admin/ai/settlements') {
+      return json(await fetchAiSettlementReviews(db))
     }
 
     if (route === '/admin/treasury-seed') {
