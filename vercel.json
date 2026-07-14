@@ -19,7 +19,19 @@
   },
   "rewrites": [
     { "source": "/s/:code/opengraph-image", "destination": "/api/og?code=:code" },
+    { "source": "/markets/:id/opengraph-image", "destination": "/api/og?code=:id" },
     { "source": "/s/:code", "destination": "/api/share?code=:code" },
+    {
+      "source": "/markets/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Discordbot|TelegramBot|Googlebot|bingbot|embedly)"
+        }
+      ],
+      "destination": "/api/share?code=:id"
+    },
     { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }
   ],
   "headers": [

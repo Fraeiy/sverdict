@@ -13,6 +13,10 @@ export function siteOrigin(req) {
   return DEFAULT_SITE
 }
 
+export function shortMarketCode(marketId) {
+  return String(marketId).replace(/-/g, '').slice(0, 8).toLowerCase()
+}
+
 export function yesPct(market) {
   const total = Number(market.yes_pool || 0) + Number(market.no_pool || 0)
   if (!total) return 50
@@ -51,15 +55,23 @@ export async function fetchMarketByCode(code) {
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
   if (!url || !key) return null
 
-  const prefix = String(code).replace(/-/g, '').slice(0, 8).toLowerCase()
+  const raw = String(code).trim()
+  const compact = raw.replace(/-/g, '').toLowerCase()
+  const prefix = compact.slice(0, 8)
   const base = `${url.replace(/\/$/, '')}/rest/v1/markets`
   const headers = { apikey: key, Authorization: `Bearer ${key}` }
 
   const select = 'id,question,description,yes_pool,no_pool,status,category,created_by'
-  const attempts = [
+  const attempts = []
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    attempts.push(`${base}?select=${select}&id=eq.${encodeURIComponent(raw)}&limit=1`)
+  }
+
+  attempts.push(
     `${base}?select=${select}&limit=20&id=like.${encodeURIComponent(`${prefix}%`)}`,
     `${base}?select=${select}&order=created_at.desc&limit=150`,
-  ]
+  )
 
   let market = null
   for (const endpoint of attempts) {
@@ -104,8 +116,14 @@ export function buildOgImageUrl(origin, code, positionParam) {
 export function buildShareMeta({ origin, code, market, position, positionParam }) {
   const yes = market ? yesPct(market) : 50
   const no = 100 - yes
-  const shareUrl = code ? `${origin}/s/${code}` : origin
-  const image = buildOgImageUrl(origin, code, positionParam)
+  const shortCode = market
+    ? shortMarketCode(market.id)
+    : String(code).replace(/-/g, '').slice(0, 8).toLowerCase()
+  const positionQuery = positionParam
+    ? `?p=${encodeURIComponent(Array.isArray(positionParam) ? positionParam[0] : positionParam)}`
+    : ''
+  const shareUrl = shortCode ? `${origin}/s/${shortCode}${positionQuery}` : origin
+  const image = buildOgImageUrl(origin, shortCode, positionParam)
 
   if (!market) {
     return {
@@ -113,7 +131,7 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
       description: 'Trade the future on Unicity Sphere — stake UCT on real outcomes.',
       shareUrl,
       image,
-      canonical: origin,
+      canonical: shareUrl,
       yes,
       no,
       isPosition: false,
@@ -136,15 +154,12 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
     description = `${yes}% YES · ${no}% NO — ${BRAND} prediction market on Sphere`
   }
 
-  const query = positionParam ? `?p=${encodeURIComponent(Array.isArray(positionParam) ? positionParam[0] : positionParam)}` : ''
-  const canonical = `${origin}/markets/${market.id}${query}`
-
   return {
     title,
     description,
     shareUrl,
     image,
-    canonical,
+    canonical: shareUrl,
     yes,
     no,
     market,

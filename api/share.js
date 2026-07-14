@@ -51,8 +51,5 @@ export default async function handler(req, res) {
 
   res.setHeader('Cache-Control', 'private, no-cache')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
-  res.status(market ? 200 : 404).send(buildOgHtml({
-    ...meta,
-    canonical: market ? redirect : origin,
-  }))
+  res.status(market ? 200 : 404).send(buildOgHtml(meta))
 }
