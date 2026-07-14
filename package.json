@@ -40,6 +40,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.18.0",
+    "sharp": "^0.35.3",
     "ws": "^8.18.1"
   },
   "devDependencies": {
