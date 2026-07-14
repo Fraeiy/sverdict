@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ShareSheet } from '../share/ShareSheet'
+import { ShareIcon } from '../ui/ShareIcon'
 import type { Position } from '../../lib/types'
 import { positionShareText, positionShareUrl } from '../../lib/share'
-import { fmtUct } from '../../lib/format'
+import { fmtUct, yesProbability } from '../../lib/format'
 
 type Props = {
   position: Position
@@ -26,28 +27,33 @@ export function PositionCard({ position, trader, onShared }: Props) {
     value: Number(value),
     by: trader,
   })
+  const yes = position.market ? yesProbability(position.market) : 50
 
   return (
     <>
-      <div className="card card-hover relative p-5">
-        <button
-          type="button"
-          onClick={() => setShareOpen(true)}
-          className="btn-ghost absolute right-3 top-3 rounded-md px-2 py-1 font-data text-[9px] font-bold uppercase tracking-wider"
-        >
-          Share
-        </button>
-
-        <Link to={`/markets/${position.market_id}`} className="block pr-16">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <p className="line-clamp-2 flex-1 font-medium leading-snug text-[var(--color-text)]">
+      <div className="card card-hover card-3d relative p-5">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <Link to={`/markets/${position.market_id}`} className="min-w-0 flex-1 pr-2">
+            <p className="line-clamp-2 font-medium leading-snug text-[var(--color-text)]">
               {position.market?.question || 'Market position'}
             </p>
-            <span className={`chip shrink-0 ${outcome === 'YES' ? 'chip-yes' : 'chip-no'}`}>
+          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className={`chip ${outcome === 'YES' ? 'chip-yes' : 'chip-no'}`}>
               {outcome}
             </span>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="btn-ghost share-btn rounded-md p-2"
+              aria-label="Share position"
+            >
+              <ShareIcon />
+            </button>
           </div>
+        </div>
 
+        <Link to={`/markets/${position.market_id}`} className="block">
           <div className="grid grid-cols-3 gap-3 border-t border-[var(--color-border)] pt-3">
             <div>
               <p className="label-caps">Staked</p>
@@ -81,12 +87,16 @@ export function PositionCard({ position, trader, onShared }: Props) {
         shareUrl={shareUrl}
         onClose={() => setShareOpen(false)}
         onCopied={() => onShared?.()}
+        preview={{
+          headline: position.market?.question || 'Market position',
+          description: `${outcome} · Staked ${fmtUct(stake)} · PnL ${pnl >= 0 ? '+' : ''}${fmtUct(pnl)}`,
+          badge: outcome,
+          imageAccent: outcome === 'YES' ? yes : 100 - yes,
+        }}
         card={{
           headline: position.market?.question || 'Market position',
-          subline: `${outcome} position`,
           side: String(outcome),
           stake: Number(stake),
-          value: Number(value),
           pnl: Number(pnl),
           trader,
         }}

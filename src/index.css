@@ -62,18 +62,40 @@ body {
 }
 
 .card {
-  background: linear-gradient(145deg, rgba(26, 26, 26, 0.98), rgba(17, 17, 17, 0.99));
+  background: linear-gradient(155deg, rgba(32, 32, 32, 0.96) 0%, rgba(17, 17, 17, 0.99) 55%, rgba(12, 12, 12, 1) 100%);
   border: 1px solid var(--color-border);
   border-radius: 1rem;
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.05), 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(245, 158, 11, 0.05),
+    0 10px 36px rgba(0, 0, 0, 0.45);
+}
+.card-3d {
+  transform-style: preserve-3d;
+  perspective: 900px;
 }
 .card-hover {
-  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
 }
 .card-hover:hover {
-  border-color: rgba(245, 158, 11, 0.4);
-  transform: translateY(-2px);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-color: rgba(245, 158, 11, 0.42);
+  transform: translateY(-3px) rotateX(1.5deg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(245, 158, 11, 0.12),
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 4px 20px rgba(245, 158, 11, 0.08);
+}
+.sheet-3d {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 64px rgba(0, 0, 0, 0.65),
+    0 8px 24px rgba(245, 158, 11, 0.1);
+  animation: sheet-rise 0.28s ease-out;
+}
+@keyframes sheet-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .card-glow {
   position: relative;
@@ -161,6 +183,111 @@ body {
   outline: none;
   border-color: rgba(245, 158, 11, 0.55);
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+}
+.input-pro[type="number"]::-webkit-inner-spin-button,
+.input-pro[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.input-pro[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.share-btn {
+  color: var(--color-muted);
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.share-btn:hover {
+  color: var(--color-gold-bright);
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.1);
+  transform: translateY(-1px);
+}
+
+.link-preview {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 0;
+  overflow: hidden;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  background: linear-gradient(145deg, rgba(28, 28, 28, 0.98), rgba(16, 16, 16, 1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+.link-preview-media {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 70%, rgba(245, 158, 11, 0.25), rgba(0, 0, 0, 0.6));
+  border-right: 1px solid var(--color-border);
+  min-height: 96px;
+}
+.link-preview-logo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.65rem;
+  object-fit: cover;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+.link-preview-badge {
+  position: absolute;
+  bottom: 0.45rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.85);
+  color: var(--color-gold-bright);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  white-space: nowrap;
+}
+.link-preview-accent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-primary-bright), var(--color-primary));
+}
+.link-preview-body {
+  padding: 0.75rem 0.85rem;
+  min-width: 0;
+}
+.link-preview-domain {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.link-preview-title {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.link-preview-desc {
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.45;
+  color: var(--color-text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .odds-track {

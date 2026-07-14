@@ -654,6 +654,7 @@ export function AdminPage({ platform, onToast }: Props) {
             </select>
             <input
               type="number"
+              inputMode="numeric"
               min={1}
               value={days}
               onChange={e => setDays(Number(e.target.value))}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BRAND_LOGO, BRAND_NAME } from '../../lib/brand'
-import { copyToClipboard, nativeShare } from '../../lib/share'
 import { fmtUct } from '../../lib/format'
+import { copyToClipboard, nativeShare, shareLinkLabel } from '../../lib/share'
 
 type Props = {
   open: boolean
@@ -10,6 +10,12 @@ type Props = {
   shareUrl: string
   onClose: () => void
   onCopied?: () => void
+  preview?: {
+    headline: string
+    description?: string
+    badge?: string
+    imageAccent?: number
+  }
   card?: {
     headline: string
     subline?: string
@@ -21,15 +27,18 @@ type Props = {
   }
 }
 
-export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied, card }: Props) {
+export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied, preview, card }: Props) {
   const [busy, setBusy] = useState(false)
 
   if (!open) return null
 
+  const linkLabel = shareLinkLabel(shareUrl)
+  const accent = preview?.imageAccent ?? 50
+
   async function handleCopy() {
     setBusy(true)
     try {
-      await copyToClipboard(shareText)
+      await copyToClipboard(shareUrl)
       onCopied?.()
     } finally {
       setBusy(false)
@@ -39,7 +48,11 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
   async function handleNativeShare() {
     setBusy(true)
     try {
-      const shared = await nativeShare({ title, text: shareText, url: shareUrl })
+      const shared = await nativeShare({
+        title: preview?.headline || title,
+        text: shareText.split('\n').slice(0, 2).join('\n'),
+        url: shareUrl,
+      })
       if (!shared) await handleCopy()
     } finally {
       setBusy(false)
@@ -50,11 +63,11 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 p-4 backdrop-blur-md sm:items-center"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-2xl"
+        className="sheet-3d w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5"
         onClick={e => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
@@ -64,55 +77,56 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
           </button>
         </div>
 
-        {card && (
-          <div className="card mb-4 overflow-hidden border-[rgba(245,158,11,0.28)] p-0">
-            <div className="border-b border-[var(--color-border)] bg-[rgba(245,158,11,0.08)] px-4 py-3">
-              <div className="flex items-center gap-2">
-                <img src={BRAND_LOGO} alt="" className="h-5 w-5 rounded object-cover" aria-hidden />
-                <p className="font-data text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-gold)]">
-                  {BRAND_NAME}
-                </p>
-              </div>
-              {card.trader && (
-                <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">@{card.trader.replace(/^@/, '')}</p>
+        {(preview || card) && (
+          <div className="link-preview mb-4">
+            <div className="link-preview-media">
+              <img src={BRAND_LOGO} alt="" className="link-preview-logo" />
+              {preview?.badge && (
+                <span className="link-preview-badge">{preview.badge}</span>
               )}
+              <div className="link-preview-accent" style={{ width: `${Math.min(100, Math.max(0, accent))}%` }} />
             </div>
-            <div className="p-4">
-              <p className="line-clamp-2 text-sm font-semibold leading-snug">{card.headline}</p>
-              {card.subline && (
-                <p className="mt-2 font-data text-[10px] text-[var(--color-muted)]">{card.subline}</p>
-              )}
-              <div className="mt-4 grid grid-cols-3 gap-3">
-                {card.side && (
-                  <div>
-                    <p className="label-caps">Side</p>
-                    <p className={`mt-1 font-data text-sm font-bold ${card.side === 'YES' ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
-                      {card.side}
-                    </p>
-                  </div>
-                )}
-                {card.stake != null && (
-                  <div>
-                    <p className="label-caps">Staked</p>
-                    <p className="mt-1 font-data text-sm font-bold">{fmtUct(card.stake)}</p>
-                  </div>
-                )}
-                {card.pnl != null && (
-                  <div>
-                    <p className="label-caps">PnL</p>
-                    <p className={`mt-1 font-data text-sm font-bold ${pnl >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
-                      {pnl >= 0 ? '+' : ''}{fmtUct(pnl)}
-                    </p>
-                  </div>
-                )}
-              </div>
+            <div className="link-preview-body">
+              <p className="link-preview-domain">{linkLabel.split('/')[0]}</p>
+              <p className="link-preview-title">{preview?.headline || card?.headline}</p>
+              <p className="link-preview-desc">
+                {preview?.description || card?.subline || `${BRAND_NAME} · Sphere prediction market`}
+              </p>
             </div>
           </div>
         )}
 
-        <p className="mb-4 break-all rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-4)] px-3 py-2 font-data text-[10px] text-[var(--color-text-2)]">
-          {shareUrl}
-        </p>
+        {card && (card.side || card.stake != null || card.pnl != null) && (
+          <div className="mb-4 grid grid-cols-3 gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-4)] p-3">
+            {card.side && (
+              <div>
+                <p className="label-caps">Side</p>
+                <p className={`mt-1 font-data text-sm font-bold ${card.side === 'YES' ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
+                  {card.side}
+                </p>
+              </div>
+            )}
+            {card.stake != null && (
+              <div>
+                <p className="label-caps">Staked</p>
+                <p className="mt-1 font-data text-sm font-bold">{fmtUct(card.stake)}</p>
+              </div>
+            )}
+            {card.pnl != null && (
+              <div>
+                <p className="label-caps">PnL</p>
+                <p className={`mt-1 font-data text-sm font-bold ${pnl >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
+                  {pnl >= 0 ? '+' : ''}{fmtUct(pnl)}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-[rgba(245,158,11,0.25)] bg-[var(--color-surface-4)] px-3 py-2.5">
+          <span className="live-dot shrink-0" />
+          <p className="truncate font-data text-[11px] text-[var(--color-gold)]">{linkLabel}</p>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button

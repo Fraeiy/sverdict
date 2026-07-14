@@ -68,6 +68,7 @@ export function FundingPanel({ availableBalance, onDeposit, onWithdraw }: Props)
           )}
           <input
             type="number"
+            inputMode="decimal"
             min="1"
             value={amount}
             onChange={e => setAmount(e.target.value)}

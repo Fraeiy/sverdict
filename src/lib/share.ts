@@ -9,8 +9,21 @@ export function appOrigin() {
   return ''
 }
 
+/** Compact market id for URLs — first 8 hex chars of UUID. */
+export function shortMarketCode(marketId: string) {
+  return marketId.replace(/-/g, '').slice(0, 8).toLowerCase()
+}
+
+export function isShortMarketCode(id: string) {
+  return /^[0-9a-f]{6,12}$/i.test(id.replace(/-/g, ''))
+}
+
+export function marketSharePath(marketId: string) {
+  return `/s/${shortMarketCode(marketId)}`
+}
+
 export function marketShareUrl(marketId: string) {
-  return `${appOrigin()}/markets/${marketId}`
+  return `${appOrigin()}${marketSharePath(marketId)}`
 }
 
 export type PositionShareParams = {
@@ -21,21 +34,32 @@ export type PositionShareParams = {
   by?: string
 }
 
+/** Compact query: p=YES,25,5,fraey */
+export function encodePositionShareQuery(params: PositionShareParams) {
+  const parts = [
+    params.side,
+    String(params.stake),
+    String(params.pnl),
+  ]
+  if (params.value != null) parts.push(String(params.value))
+  if (params.by) parts.push(params.by.replace(/^@/, ''))
+  return parts.join(',')
+}
+
+export function positionSharePath(marketId: string, params: PositionShareParams) {
+  const q = encodePositionShareQuery(params)
+  return `${marketSharePath(marketId)}?p=${encodeURIComponent(q)}`
+}
+
 export function positionShareUrl(marketId: string, params: PositionShareParams) {
-  const url = new URL(`${appOrigin()}/markets/${marketId}`)
-  url.searchParams.set('brag', params.side)
-  url.searchParams.set('stake', String(params.stake))
-  url.searchParams.set('pnl', String(params.pnl))
-  if (params.value != null) url.searchParams.set('value', String(params.value))
-  if (params.by) url.searchParams.set('by', params.by.replace(/^@/, ''))
-  return url.toString()
+  return `${appOrigin()}${positionSharePath(marketId, params)}`
 }
 
 export function marketShareText(market: Pick<Market, 'id' | 'question' | 'yes_pool' | 'no_pool' | 'yes_probability'>) {
   const yes = yesProbability(market as Market)
   const no = noProbability(market as Market)
   return [
-    `${market.question}`,
+    market.question,
     `YES ${yes}% · NO ${no}%`,
     `Trade on ${BRAND_NAME}`,
     marketShareUrl(market.id),
@@ -52,16 +76,39 @@ export function positionShareText(
   const pnl = Number(position.unrealized_pnl ?? value - stake)
   const question = position.market?.question || 'Market position'
   const trader = opts?.trader?.replace(/^@/, '')
+  const url = positionShareUrl(position.market_id, {
+    side: String(outcome),
+    stake,
+    pnl,
+    value,
+    by: trader,
+  })
   const lines = [
     trader ? `${trader} on ${BRAND_NAME}` : `My ${BRAND_NAME} position`,
     `${outcome} · ${question}`,
     `Staked ${fmtUct(stake)} · Est. ${fmtUct(value)} · PnL ${pnl >= 0 ? '+' : ''}${fmtUct(pnl)}`,
-    positionShareUrl(position.market_id, { side: String(outcome), stake, pnl, value, by: trader }),
+    url,
   ]
   return lines.join('\n')
 }
 
 export function parsePositionShareParams(search: URLSearchParams): PositionShareParams | null {
+  const compact = search.get('p')
+  if (compact) {
+    const [side, stakeRaw, pnlRaw, valueRaw, by] = compact.split(',')
+    const stake = Number(stakeRaw)
+    const pnl = Number(pnlRaw)
+    if (!side || !Number.isFinite(stake) || !Number.isFinite(pnl)) return null
+    const value = Number(valueRaw)
+    return {
+      side,
+      stake,
+      pnl,
+      value: Number.isFinite(value) ? value : undefined,
+      by: by || undefined,
+    }
+  }
+
   const side = search.get('brag')
   const stake = Number(search.get('stake'))
   const pnl = Number(search.get('pnl'))
@@ -74,6 +121,16 @@ export function parsePositionShareParams(search: URLSearchParams): PositionShare
     pnl,
     value: Number.isFinite(value) ? value : undefined,
     by,
+  }
+}
+
+export function shareLinkLabel(url: string) {
+  try {
+    const u = new URL(url)
+    const path = u.pathname.replace(/^\/s\//, '/…/')
+    return `${u.host}${path}`
+  } catch {
+    return url
   }
 }
 

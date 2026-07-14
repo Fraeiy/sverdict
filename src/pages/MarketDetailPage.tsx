@@ -211,6 +211,7 @@ export function MarketDetailPage({ identity, onToast }: Props) {
           <label className="label-caps mb-2 block">Stake amount (UCT)</label>
           <input
             type="number"
+            inputMode="decimal"
             min="1"
             value={amount}
             onChange={e => setAmount(e.target.value)}
@@ -284,9 +285,11 @@ export function MarketDetailPage({ identity, onToast }: Props) {
         shareUrl={marketShareUrl(market.id)}
         onClose={() => setShareOpen(false)}
         onCopied={() => onToast('Market link copied', 'success')}
-        card={{
+        preview={{
           headline: market.question,
-          subline: `YES ${yes}% · NO ${no}% · ${timeRemaining(market.deadline)}`,
+          description: `YES ${yes}% · NO ${no}% · ${timeRemaining(market.deadline)}`,
+          badge: `${yes}% YES`,
+          imageAccent: yes,
         }}
       />
     </div>

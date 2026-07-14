@@ -110,6 +110,20 @@ export async function fetchMarkets(params?: {
 
 export async function fetchMarket(id: string) {
   if (supabase) {
+    const compact = id.replace(/-/g, '')
+    if (/^[0-9a-f]{6,12}$/i.test(compact)) {
+      const prefix = compact.slice(0, 8).toLowerCase()
+      const { data: matches, error: prefixErr } = await supabase
+        .from('markets')
+        .select('*')
+        .ilike('id', `${prefix}%`)
+      if (!prefixErr && matches?.length) {
+        const row = matches.length === 1
+          ? matches[0]
+          : matches.find(m => String(m.id).replace(/-/g, '').toLowerCase().startsWith(prefix)) || matches[0]
+        return { market: enrichMarket(row as Market) }
+      }
+    }
     const { data, error } = await supabase.from('markets').select('*').eq('id', id).single()
     if (!error && data) return { market: enrichMarket(data as Market) }
   }

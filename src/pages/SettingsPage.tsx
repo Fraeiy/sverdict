@@ -243,6 +243,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
           >
             <input
               type="number"
+              inputMode="decimal"
               min={1}
               max={10000}
               value={stakeValue}
