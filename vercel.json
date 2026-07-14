@@ -12,6 +12,9 @@
   "functions": {
     "api/share.js": {
       "maxDuration": 10
+    },
+    "api/og.jsx": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
