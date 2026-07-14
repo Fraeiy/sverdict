@@ -124,9 +124,32 @@ function userMatchesAuth(u: { wallet_address: string; nametag?: string | null },
   return false
 }
 
+async function findExistingUser(db: SupabaseClient, auth: WalletAuth) {
+  const candidates = new Set<string>()
+  for (const key of userAuthKeys(auth)) {
+    if (!key) continue
+    candidates.add(key)
+    const bare = key.replace(/^@/, '')
+    if (bare) {
+      candidates.add(bare)
+      candidates.add(`@${bare}`)
+    }
+  }
+
+  for (const key of candidates) {
+    const { data: byWallet } = await db.from('users').select('*').eq('wallet_address', key).maybeSingle()
+    if (byWallet) return byWallet
+    const tag = key.replace(/^@/, '')
+    if (tag) {
+      const { data: byTag } = await db.from('users').select('*').eq('nametag', tag).maybeSingle()
+      if (byTag) return byTag
+    }
+  }
+  return null
+}
+
 async function findOrCreateUser(db: SupabaseClient, auth: WalletAuth) {
-  const { data: users } = await db.from('users').select('*')
-  let user = (users || []).find(u => userMatchesAuth(u, auth))
+  let user = await findExistingUser(db, auth)
   if (!user) {
     const wallet = auth.directAddress || auth.nametag || auth.walletAddress
     const { data, error } = await db.from('users').insert({
@@ -185,22 +208,23 @@ function resolveTreasuryUserId(
   return treasury?.id || fallbackUserId
 }
 
+const TREASURY_USER_SELECT = 'id, nametag, wallet_address, is_admin'
+
 /** @sphere-predict user row (on-chain treasury; internal ledger not used for seeds). */
 async function ensureTreasuryUser(db: SupabaseClient) {
-  const { data: users } = await db.from('users').select('id, nametag, wallet_address, is_admin')
-  let treasury = (users || []).find(isTreasuryUser)
-  if (!treasury) {
-    const { data, error } = await db.from('users').insert({
-      wallet_address: '@sphere-predict',
-      nametag: 'sphere-predict',
-      is_admin: true,
-    }).select('id, nametag, wallet_address, is_admin').single()
-    if (error) throw error
-    treasury = data
-    const { error: balErr } = await db.from('balances').insert({ user_id: treasury.id, available_balance: 0 })
-    if (balErr && !balErr.message.includes('duplicate')) throw balErr
-  }
-  return treasury
+  const { data: byTag } = await db.from('users').select(TREASURY_USER_SELECT).eq('nametag', 'sphere-predict').maybeSingle()
+  if (byTag) return byTag
+  const { data: byWallet } = await db.from('users').select(TREASURY_USER_SELECT).eq('wallet_address', '@sphere-predict').maybeSingle()
+  if (byWallet) return byWallet
+  const { data, error } = await db.from('users').insert({
+    wallet_address: '@sphere-predict',
+    nametag: 'sphere-predict',
+    is_admin: true,
+  }).select(TREASURY_USER_SELECT).single()
+  if (error) throw error
+  const { error: balErr } = await db.from('balances').insert({ user_id: data.id, available_balance: 0 })
+  if (balErr && !balErr.message.includes('duplicate')) throw balErr
+  return data
 }
 
 function marketSeedAmounts() {
@@ -523,6 +547,7 @@ async function placeTrade(db: SupabaseClient, userId: string, payload: Record<st
 }
 
 Deno.serve(async (req) => {
+  try {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
@@ -974,5 +999,9 @@ Deno.serve(async (req) => {
   } catch (e) {
     // HTTP 200 + error field — supabase.functions.invoke hides 4xx response bodies in the browser
     return json({ error: e instanceof Error ? e.message : 'Error' })
+  }
+  } catch (e) {
+    console.error('[platform] unhandled:', e)
+    return json({ error: e instanceof Error ? e.message : 'Internal error' })
   }
 })

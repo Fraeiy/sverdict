@@ -1,7 +1,12 @@
 import { useEffect } from 'react'
 
 /** Poll only while the tab is visible — saves edge calls when user is away. */
-export function useVisibleInterval(callback: () => void, ms: number, enabled = true) {
+export function useVisibleInterval(
+  callback: () => void,
+  ms: number,
+  enabled = true,
+  immediate = true,
+) {
   useEffect(() => {
     if (!enabled || ms <= 0) return
 
@@ -9,7 +14,7 @@ export function useVisibleInterval(callback: () => void, ms: number, enabled = t
       if (document.visibilityState === 'visible') callback()
     }
 
-    tick()
+    if (immediate) tick()
     const interval = setInterval(tick, ms)
 
     const onVisible = () => {
@@ -21,5 +26,5 @@ export function useVisibleInterval(callback: () => void, ms: number, enabled = t
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [callback, ms, enabled])
+  }, [callback, ms, enabled, immediate])
 }

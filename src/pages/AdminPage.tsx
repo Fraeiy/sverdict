@@ -126,11 +126,14 @@ export function AdminPage({ platform, onToast }: Props) {
     setWorkerAgeMinutes(s.statusAgeMinutes)
   }, [])
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false
     const p = platformRef.current
     if (!p.isAdmin) return
-    setQueueLoading(true)
-    setSeedQueueLoading(true)
+    if (!silent) {
+      setQueueLoading(true)
+      setSeedQueueLoading(true)
+    }
     try {
       const { treasury, withdrawals, seeds } = await p.adminDashboard()
       applyTreasury(treasury)
@@ -152,12 +155,14 @@ export function AdminPage({ platform, onToast }: Props) {
           applyPendingFallback((pending.withdrawals || []) as PendingWithdrawal[])
           if (treasury) applyTreasury(treasury)
         } catch { /* ignore */ }
-      } else {
+      } else if (!silent) {
         onToastRef.current(msg || 'Failed to load admin dashboard', 'error')
       }
     } finally {
-      setQueueLoading(false)
-      setSeedQueueLoading(false)
+      if (!silent) {
+        setQueueLoading(false)
+        setSeedQueueLoading(false)
+      }
     }
   }, [applyPendingFallback, applyTreasury])
 
@@ -174,7 +179,17 @@ export function AdminPage({ platform, onToast }: Props) {
     load({ trending: true, includePendingSeed: true }).catch(() => {})
   }, [load])
 
-  useVisibleInterval(() => { loadDashboard().catch(() => {}) }, 30_000, platform.isAdmin)
+  useEffect(() => {
+    if (!platform.isAdmin) return
+    loadDashboard().catch(() => {})
+  }, [platform.isAdmin, loadDashboard])
+
+  useVisibleInterval(
+    () => { loadDashboard({ silent: true }).catch(() => {}) },
+    60_000,
+    platform.isAdmin,
+    false,
+  )
 
   async function loadAiProposals() {
     if (aiBusy) return
