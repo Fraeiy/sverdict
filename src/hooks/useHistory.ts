@@ -15,14 +15,15 @@ export function isPendingWithdrawal(entry: HistoryEntry) {
     && PENDING_STATUSES.includes(entry.status as WithdrawalStatus)
 }
 
-export function useHistory(identity: WalletIdentity | null, opts?: { poll?: boolean }) {
+export function useHistory(identity: WalletIdentity | null, opts?: { poll?: boolean; enabled?: boolean }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const auth = useMemo(
     () => authFromIdentity(identity),
     [identity?.nametag, identity?.directAddress, identity?.publicKey],
   )
-  const shouldPoll = opts?.poll !== false && getBackendMode() === 'supabase'
+  const enabled = opts?.enabled !== false
+  const shouldPoll = enabled && opts?.poll !== false && getBackendMode() === 'supabase'
 
   const pendingWithdrawals = useMemo(
     () => entries.filter(isPendingWithdrawal),
@@ -48,9 +49,13 @@ export function useHistory(identity: WalletIdentity | null, opts?: { poll?: bool
   }, [auth])
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     refresh().catch(() => setLoading(false))
-  }, [refresh])
+  }, [enabled, refresh])
 
   useEffect(() => {
     if (!auth || !shouldPoll) return

@@ -7,6 +7,11 @@
   "env": {
     "VITE_WALLET_URL": "https://sphere.unicity.network"
   },
+  "functions": {
+    "api/share.mjs": {
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     { "source": "/s/:code", "destination": "/api/share?code=:code" },
     { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }

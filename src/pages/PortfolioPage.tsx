@@ -7,7 +7,6 @@ import { PositionCard } from '../components/portfolio/PositionCard'
 import { useHistory } from '../hooks/useHistory'
 import { usePositions } from '../hooks/usePositions'
 import { useSpherePayment } from '../hooks/useSpherePayment'
-import { usePlatform } from '../hooks/usePlatform'
 import type { WalletIdentity } from '../lib/types'
 import { fmtUct, realizedPnl } from '../lib/format'
 
@@ -15,6 +14,8 @@ type Tab = 'overview' | 'positions' | 'history'
 
 type Props = {
   identity: WalletIdentity | null
+  treasuryAddress: string
+  userId?: string
   wallet: {
     sendPayment?: (p: { recipient: string; amountHuman: number; coinId?: string; memo?: string }) => Promise<unknown>
     refreshBalance?: () => Promise<void>
@@ -27,14 +28,17 @@ function tabFromParam(value: string | null): Tab {
   return 'overview'
 }
 
-export function PortfolioPage({ identity, wallet, onToast }: Props) {
+export function PortfolioPage({ identity, treasuryAddress, userId, wallet, onToast }: Props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>(() => tabFromParam(searchParams.get('tab')))
 
-  const platform = usePlatform(identity)
-  const { portfolio, openPositions, resolvedPositions, availableBalance, deposit, withdraw, loading, refresh } = usePositions(identity)
-  const { entries: history, loading: historyLoading, pendingWithdrawals, refresh: refreshHistory } = useHistory(identity)
-  const { depositToPortfolio } = useSpherePayment(wallet, platform.treasuryAddress)
+  const { portfolio, openPositions, resolvedPositions, availableBalance, pendingWithdrawals, deposit, withdraw, loading, refresh } = usePositions(identity)
+  const historyEnabled = tab === 'history'
+  const { entries: history, loading: historyLoading, refresh: refreshHistory } = useHistory(identity, {
+    enabled: historyEnabled,
+    poll: historyEnabled,
+  })
+  const { depositToPortfolio } = useSpherePayment(wallet, treasuryAddress)
   const withdrawalStatusRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
@@ -44,25 +48,30 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
   }, [searchParams, refreshHistory])
 
   useEffect(() => {
-    for (const entry of history) {
-      if (entry.type !== 'withdrawal' || !entry.status) continue
+    for (const entry of pendingWithdrawals) {
       const prev = withdrawalStatusRef.current.get(entry.id)
-      const status = String(entry.status)
+      const status = String(entry.status || 'submitted')
       if (prev !== undefined && prev !== status) {
-        if (status === 'completed') {
-          onToast(`${fmtUct(entry.amount)} sent to your Sphere wallet`, 'success')
-          refresh().catch(() => {})
-          wallet.refreshBalance?.()
-        } else if (status === 'failed') {
-          onToast(`${fmtUct(entry.amount)} withdrawal failed — balance restored`, 'error')
-          refresh().catch(() => {})
-        } else if (status === 'processing' && prev === 'submitted') {
+        if (status === 'processing' && prev === 'submitted') {
           onToast(`Treasury is sending ${fmtUct(entry.amount)}…`, 'info')
         }
       }
       withdrawalStatusRef.current.set(entry.id, status)
     }
-  }, [history, onToast, refresh, wallet])
+    const prevIds = [...withdrawalStatusRef.current.keys()].filter(id => id.startsWith('withdrawal-'))
+    const nextIds = new Set(pendingWithdrawals.map(w => w.id))
+    for (const id of prevIds) {
+      if (!nextIds.has(id)) {
+        const prev = withdrawalStatusRef.current.get(id)
+        if (prev === 'submitted' || prev === 'processing') {
+          onToast('Withdrawal sent to your Sphere wallet', 'success')
+          refresh().catch(() => {})
+          wallet.refreshBalance?.()
+        }
+        withdrawalStatusRef.current.delete(id)
+      }
+    }
+  }, [pendingWithdrawals, onToast, refresh, wallet])
 
   function selectTab(next: Tab) {
     setTab(next)
@@ -72,7 +81,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
   async function handleDeposit(amount: number) {
     try {
       onToast('Approve deposit in your Sphere wallet…', 'info')
-      const payment = await depositToPortfolio(amount, platform.user?.id)
+      const payment = await depositToPortfolio(amount, userId)
       await deposit(amount, payment.txReference, payment.memo)
       await wallet.refreshBalance?.()
       await refresh()
@@ -97,13 +106,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
     }
   }
 
-  if (loading && !portfolio) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-16 text-center font-data text-sm text-[var(--color-muted)]">
-        Loading portfolio…
-      </div>
-    )
-  }
+  const showSkeleton = loading && !portfolio
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'overview', label: 'Overview' },
@@ -151,7 +154,16 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
       </div>
 
       <div className="mt-8">
-        {tab === 'overview' && (
+        {showSkeleton ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="stat-block h-24 animate-pulse rounded-xl bg-[var(--color-surface-3)]" />
+              ))}
+            </div>
+            <div className="h-40 animate-pulse rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-3)]" />
+          </div>
+        ) : tab === 'overview' && (
           <div className="space-y-8">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Stat label="Total value" value={fmtUct(portfolio?.total_portfolio_value ?? 0)} gold />
@@ -197,7 +209,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
           </div>
         )}
 
-        {tab === 'positions' && (
+        {!showSkeleton && tab === 'positions' && (
           <div className="space-y-10">
             <section>
               <h2 className="mb-4 font-data text-xs font-bold uppercase tracking-wider">Open positions</h2>
@@ -259,7 +271,7 @@ export function PortfolioPage({ identity, wallet, onToast }: Props) {
           </div>
         )}
 
-        {tab === 'history' && (
+        {!showSkeleton && tab === 'history' && (
           <HistoryList entries={history} loading={historyLoading} />
         )}
       </div>

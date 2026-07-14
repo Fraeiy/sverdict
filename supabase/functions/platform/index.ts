@@ -431,11 +431,20 @@ async function queueOutboundDm(
 }
 
 async function getPortfolio(db: SupabaseClient, userId: string) {
-  const [{ data: positions }, { data: markets }, available] = await Promise.all([
+  const [{ data: positions }, available, { data: pendingWd }] = await Promise.all([
     db.from('positions').select('*').eq('user_id', userId),
-    db.from('markets').select('*'),
     getBalance(db, userId),
+    db.from('withdrawals')
+      .select('id, amount, status, created_at')
+      .eq('user_id', userId)
+      .in('status', ['submitted', 'processing'])
+      .order('created_at', { ascending: false }),
   ])
+
+  const marketIds = [...new Set((positions || []).map(p => String(p.market_id)).filter(Boolean))]
+  const { data: markets } = marketIds.length
+    ? await db.from('markets').select('*').in('id', marketIds)
+    : { data: [] as Record<string, unknown>[] }
 
   const marketMap = new Map((markets || []).map(m => [String(m.id), m]))
   const open = (positions || []).filter(p => p.status === 'open')
@@ -490,6 +499,15 @@ async function getPortfolio(db: SupabaseClient, userId: string) {
     total_pnl: unrealizedPnl + realizedPnl,
     open_positions: openWithValue,
     resolved_positions: resolvedPositions,
+    pending_withdrawals: (pendingWd || []).map(w => ({
+      id: `withdrawal-${w.id}`,
+      type: 'withdrawal',
+      amount: Number(w.amount),
+      direction: 'out',
+      label: w.status === 'processing' ? 'Withdrawal processing' : 'Withdrawal queued',
+      status: w.status,
+      created_at: w.created_at,
+    })),
   }
 }
 

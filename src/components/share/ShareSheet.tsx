@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BRAND_LOGO, BRAND_NAME } from '../../lib/brand'
 import { fmtUct } from '../../lib/format'
 import { copyToClipboard, nativeShare, shareLinkLabel } from '../../lib/share'
@@ -29,6 +29,11 @@ type Props = {
 
 export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied, preview, card }: Props) {
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!open) setCopied(false)
+  }, [open])
 
   if (!open) return null
 
@@ -39,7 +44,9 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
     setBusy(true)
     try {
       await copyToClipboard(shareUrl)
+      setCopied(true)
       onCopied?.()
+      setTimeout(() => setCopied(false), 2500)
     } finally {
       setBusy(false)
     }
@@ -124,7 +131,9 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
         )}
 
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-[rgba(245,158,11,0.25)] bg-[var(--color-surface-4)] px-3 py-2.5">
-          <span className="live-dot shrink-0" />
+          <span className={`shrink-0 font-data text-[10px] font-bold ${copied ? 'text-[var(--color-yes)]' : 'text-[var(--color-muted)]'}`}>
+            {copied ? '✓' : '⎘'}
+          </span>
           <p className="truncate font-data text-[11px] text-[var(--color-gold)]">{linkLabel}</p>
         </div>
 
@@ -133,9 +142,13 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
             type="button"
             disabled={busy}
             onClick={handleCopy}
-            className="btn-ghost rounded-lg py-3 font-data text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+            className={`rounded-lg py-3 font-data text-[10px] font-bold uppercase tracking-wider disabled:opacity-50 ${
+              copied
+                ? 'border border-[rgba(74,222,128,0.45)] bg-[rgba(74,222,128,0.12)] text-[var(--color-yes)]'
+                : 'btn-ghost'
+            }`}
           >
-            Copy link
+            {copied ? 'Copied!' : 'Copy link'}
           </button>
           <button
             type="button"

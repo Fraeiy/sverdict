@@ -6,7 +6,8 @@ export function appOrigin() {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
   }
-  return ''
+  const env = import.meta.env.VITE_SITE_URL
+  return env ? String(env).replace(/\/$/, '') : ''
 }
 
 /** Compact market id for URLs — first 8 hex chars of UUID. */

@@ -92,6 +92,8 @@ export default function App() {
               <Suspense fallback={<PageFallback />}>
                 <PortfolioPage
                   identity={wallet.identity}
+                  treasuryAddress={platform.treasuryAddress}
+                  userId={platform.user?.id}
                   wallet={wallet}
                   onToast={showToast}
                 />

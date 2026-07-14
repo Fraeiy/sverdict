@@ -112,6 +112,7 @@ export interface Portfolio {
   total_pnl: number
   open_positions: Position[]
   resolved_positions: Position[]
+  pending_withdrawals?: HistoryEntry[]
 }
 
 export interface WalletIdentity {
