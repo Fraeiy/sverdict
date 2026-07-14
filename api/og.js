@@ -10,10 +10,6 @@ import {
   siteOrigin,
 } from './lib/shareMeta.mjs'
 
-export const config = {
-  runtime: 'edge',
-}
-
 const h = React.createElement
 
 const COLORS = {
@@ -34,23 +30,60 @@ function truncate(text, max = 120) {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s
 }
 
-function Stat({ label, value, valueColor = COLORS.text }) {
-  return h('div', { style: { display: 'flex', flexDirection: 'column', flex: 1 } },
-    h('div', {
-      style: {
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: COLORS.muted,
-        marginBottom: 6,
-      },
-    }, label),
-    h('div', { style: { fontSize: 20, fontWeight: 700, color: valueColor } }, value),
+function questionFontSize(text) {
+  const len = String(text || '').length
+  if (len > 110) return 24
+  if (len > 80) return 28
+  if (len > 50) return 32
+  return 36
+}
+
+function wrapQuestion(text) {
+  const words = String(text || '').trim().split(/\s+/)
+  const lines = []
+  let line = ''
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word
+    if (next.length > 42 && line) {
+      lines.push(line)
+      line = word
+    } else {
+      line = next
+    }
+    if (lines.length >= 3) break
+  }
+  if (line && lines.length < 3) lines.push(line)
+  if (lines.length === 3 && words.join(' ').length > lines.join(' ').length) {
+    lines[2] = truncate(lines[2], 40)
+  }
+  return lines.length ? lines : [truncate(text, 80) || BRAND]
+}
+
+function statCell(label, value, valueColor = COLORS.text) {
+  return h('div', {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      flex: 1,
+    },
+  },
+  h('div', {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: '0.1em',
+      textTransform: 'uppercase',
+      color: COLORS.muted,
+      marginBottom: 6,
+    },
+  }, label),
+  h('div', {
+    style: { fontSize: 20, fontWeight: 700, color: valueColor },
+  }, value),
   )
 }
 
-function OgCard({ origin, meta }) {
+function buildOgElement(origin, meta) {
   const logo = `${origin}${LOGO_PATH}`
   const accent = meta.position?.side
     ? (meta.side === 'YES' ? meta.yes : meta.no)
@@ -60,6 +93,11 @@ function OgCard({ origin, meta }) {
   const badgeColor = isYes ? COLORS.yes : COLORS.no
   const badgeBg = isYes ? 'rgba(251, 191, 36, 0.18)' : 'rgba(248, 113, 113, 0.18)'
   const badgeBorder = isYes ? 'rgba(251, 191, 36, 0.45)' : 'rgba(248, 113, 113, 0.45)'
+  const creator = meta.trader
+    ? `@${meta.trader}`
+    : (meta.creator ? `@${meta.creator}` : null)
+  const questionLines = wrapQuestion(meta.title)
+  const qSize = questionFontSize(meta.title)
 
   const badge = side
     ? h('div', {
@@ -101,26 +139,35 @@ function OgCard({ origin, meta }) {
         padding: '18px 22px',
       },
     },
-    h(Stat, { label: 'Side', value: side, valueColor: badgeColor }),
-    h(Stat, { label: 'Staked', value: fmtUct(meta.position.stake) }),
-    h(Stat, {
-      label: 'PnL',
-      value: `${meta.position.pnl >= 0 ? '+' : ''}${fmtUct(meta.position.pnl)}`,
-      valueColor: meta.position.pnl >= 0 ? COLORS.yes : COLORS.no,
-    }),
+    statCell('Side', side || '—', badgeColor),
+    statCell('Staked', fmtUct(meta.position.stake)),
+    statCell(
+      'PnL',
+      `${meta.position.pnl >= 0 ? '+' : ''}${fmtUct(meta.position.pnl)}`,
+      meta.position.pnl >= 0 ? COLORS.yes : COLORS.no,
+    ),
+    statCell(
+      'Est. value',
+      meta.position.value != null ? fmtUct(meta.position.value) : '—',
+      COLORS.goldBright,
+    ),
     )
     : h('div', {
       style: {
         display: 'flex',
         gap: 20,
         marginTop: 'auto',
-        fontSize: 16,
+        fontSize: 18,
         color: COLORS.muted,
+        alignItems: 'center',
       },
     },
-    h('span', null, h('span', { style: { color: COLORS.yes, fontWeight: 700 } }, `YES ${meta.yes}%`)),
+    h('span', { style: { color: COLORS.yes, fontWeight: 700 } }, `YES ${meta.yes}%`),
     h('span', null, '·'),
-    h('span', null, h('span', { style: { color: COLORS.no, fontWeight: 700 } }, `NO ${meta.no}%`)),
+    h('span', { style: { color: COLORS.no, fontWeight: 700 } }, `NO ${meta.no}%`),
+    creator
+      ? h('span', { style: { marginLeft: 12, color: COLORS.gold } }, creator)
+      : null,
     )
 
   return h('div', {
@@ -143,7 +190,6 @@ function OgCard({ origin, meta }) {
       border: `2px solid ${COLORS.cardBorder}`,
       background: COLORS.card,
       overflow: 'hidden',
-      boxShadow: '0 24px 80px rgba(0,0,0,0.55)',
     },
   },
   h('div', {
@@ -171,7 +217,7 @@ function OgCard({ origin, meta }) {
     style: { borderRadius: 20, objectFit: 'cover' },
   }),
   ),
-  h('div', { style: { height: 10, background: '#1a1a1a' } },
+  h('div', { style: { height: 10, background: '#1a1a1a', display: 'flex' } },
     h('div', {
       style: {
         height: '100%',
@@ -186,66 +232,121 @@ function OgCard({ origin, meta }) {
       display: 'flex',
       flexDirection: 'column',
       flex: 1,
-      padding: '40px 44px',
+      padding: '36px 44px',
     },
   },
-  h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
-    h('div', {
-      style: {
-        fontSize: 14,
-        fontWeight: 700,
-        letterSpacing: '0.12em',
-        textTransform: 'uppercase',
-        color: COLORS.gold,
-      },
-    }, BRAND),
-    badge,
+  h('div', {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 12,
+      flexWrap: 'wrap',
+    },
+  },
+  h('div', {
+    style: {
+      fontSize: 14,
+      fontWeight: 700,
+      letterSpacing: '0.12em',
+      textTransform: 'uppercase',
+      color: COLORS.gold,
+    },
+  }, BRAND),
+  badge,
+  creator && meta.isPosition
+    ? h('div', {
+      style: { fontSize: 14, color: COLORS.muted },
+    }, creator)
+    : null,
   ),
   h('div', {
     style: {
-      fontSize: 34,
-      fontWeight: 700,
-      lineHeight: 1.25,
-      color: COLORS.text,
-      marginBottom: 16,
-      maxHeight: 130,
-      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+      marginBottom: 14,
     },
-  }, truncate(meta.title, 110)),
+  }, questionLines.map((line, i) => h('div', {
+    key: `q-${i}`,
+    style: {
+      fontSize: qSize,
+      fontWeight: 700,
+      lineHeight: 1.2,
+      color: COLORS.text,
+    },
+  }, line))),
   h('div', {
     style: {
-      fontSize: 18,
-      lineHeight: 1.45,
+      fontSize: 17,
+      lineHeight: 1.4,
       color: COLORS.muted,
-      marginBottom: 28,
-      maxHeight: 84,
-      overflow: 'hidden',
+      marginBottom: 20,
     },
-  }, truncate(meta.description, 140)),
+  }, truncate(meta.description, 120)),
   footer,
   ),
   ),
   )
 }
 
-export default async function handler(req) {
-  const url = new URL(req.url)
-  const code = url.searchParams.get('code') || ''
-  const origin = siteOrigin({ headers: Object.fromEntries(req.headers) })
-  const position = parsePositionShareParams(url.searchParams)
-  const market = code ? await fetchMarketByCode(code) : null
-  const positionParam = url.searchParams.get('p') || undefined
-
-  const meta = buildShareMeta({
-    origin,
-    code,
-    market,
-    position,
-    positionParam,
+function fallbackOgElement(origin) {
+  return buildOgElement(origin, {
+    title: `${BRAND} prediction markets`,
+    description: 'Trade the future on Unicity Sphere — stake UCT on real outcomes.',
+    yes: 50,
+    no: 50,
+    isPosition: false,
   })
+}
 
-  return new ImageResponse(
-    h(OgCard, { origin, meta }),
-    { width: 1200, height: 630 },
-  )
+function requestUrl(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'sverdict.vercel.app'
+  const proto = req.headers['x-forwarded-proto'] || 'https'
+  const path = typeof req.url === 'string' ? req.url : '/api/og'
+  return new URL(path, `${proto}://${host}`)
+}
+
+async function renderPng(element) {
+  const image = new ImageResponse(element, {
+    width: 1200,
+    height: 630,
+  })
+  return Buffer.from(await image.arrayBuffer())
+}
+
+export default async function handler(req, res) {
+  try {
+    const url = requestUrl(req)
+    const code = url.searchParams.get('code') || ''
+    const origin = siteOrigin({ headers: req.headers })
+    const position = parsePositionShareParams(url.searchParams)
+    const positionParam = url.searchParams.get('p') || undefined
+    const market = code ? await fetchMarketByCode(code) : null
+
+    const meta = buildShareMeta({
+      origin,
+      code,
+      market,
+      position,
+      positionParam,
+    })
+
+    const element = buildOgElement(origin, meta)
+    const png = await renderPng(element)
+
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400')
+    res.status(200).send(png)
+  } catch (err) {
+    try {
+      const origin = siteOrigin({ headers: req.headers })
+      const png = await renderPng(fallbackOgElement(origin))
+      res.setHeader('Content-Type', 'image/png')
+      res.setHeader('Cache-Control', 'public, s-maxage=60')
+      res.status(200).send(png)
+    } catch {
+      res.status(500).send(err instanceof Error ? err.message : 'OG image failed')
+    }
+  }
 }

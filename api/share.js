@@ -1,7 +1,7 @@
 /**
  * Short share links with Open Graph previews for social apps.
  * Humans: 302 redirect to the SPA market page.
- * Crawlers: static HTML with og:* tags and dynamic /api/og image.
+ * Crawlers: static HTML with og:* tags and /s/:code/opengraph-image PNG.
  */
 
 import {

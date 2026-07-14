@@ -55,31 +55,50 @@ export async function fetchMarketByCode(code) {
   const base = `${url.replace(/\/$/, '')}/rest/v1/markets`
   const headers = { apikey: key, Authorization: `Bearer ${key}` }
 
+  const select = 'id,question,description,yes_pool,no_pool,status,category,created_by'
   const attempts = [
-    `${base}?select=id,question,description,yes_pool,no_pool,status,category&limit=20&id=like.${encodeURIComponent(`${prefix}%`)}`,
-    `${base}?select=id,question,description,yes_pool,no_pool,status,category&order=created_at.desc&limit=150`,
+    `${base}?select=${select}&limit=20&id=like.${encodeURIComponent(`${prefix}%`)}`,
+    `${base}?select=${select}&order=created_at.desc&limit=150`,
   ]
 
+  let market = null
   for (const endpoint of attempts) {
     const res = await fetch(endpoint, { headers })
     if (!res.ok) continue
     const rows = await res.json()
     if (!Array.isArray(rows) || !rows.length) continue
     const hit = rows.find(m => String(m.id).replace(/-/g, '').toLowerCase().startsWith(prefix))
-    if (hit) return hit
+    if (hit) {
+      market = hit
+      break
+    }
   }
-  return null
+  if (!market) return null
+
+  if (market.created_by) {
+    try {
+      const userRes = await fetch(
+        `${url.replace(/\/$/, '')}/rest/v1/users?id=eq.${market.created_by}&select=nametag&limit=1`,
+        { headers },
+      )
+      if (userRes.ok) {
+        const users = await userRes.json()
+        if (users?.[0]?.nametag) market.creator_nametag = users[0].nametag
+      }
+    } catch { /* optional */ }
+  }
+
+  return market
 }
 
 export function buildOgImageUrl(origin, code, positionParam) {
-  const params = new URLSearchParams()
-  if (code) params.set('code', String(code))
+  const safeCode = encodeURIComponent(String(code || ''))
+  const base = `${origin}/s/${safeCode}/opengraph-image`
   const p = positionParam != null
     ? (Array.isArray(positionParam) ? positionParam[0] : String(positionParam))
     : ''
-  if (p) params.set('p', p)
-  const qs = params.toString()
-  return `${origin}/api/og${qs ? `?${qs}` : ''}`
+  if (!p) return base
+  return `${base}?p=${encodeURIComponent(p)}`
 }
 
 export function buildShareMeta({ origin, code, market, position, positionParam }) {
@@ -105,6 +124,7 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
   const title = market.question
   const side = position?.side?.toUpperCase()
   const trader = position?.by?.replace(/^@/, '')
+  const creator = market.creator_nametag?.replace(/^@/, '') || undefined
 
   let description
   if (position) {
@@ -131,6 +151,7 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
     position,
     side,
     trader,
+    creator,
     isPosition: !!position,
     isFallback: false,
   }
@@ -158,8 +179,10 @@ export function buildOgHtml(meta) {
   <meta property="og:title" content="${escapeHtml(title)}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta property="og:image" content="${image}" />
+  <meta property="og:image:secure_url" content="${image}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
   <meta property="og:url" content="${shareUrl}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escapeHtml(title)}" />
