@@ -83,8 +83,19 @@ function statCell(label, value, valueColor = COLORS.text) {
   )
 }
 
-function buildOgElement(origin, meta) {
-  const logo = `${origin}${LOGO_PATH}`
+async function fetchLogoDataUrl(origin) {
+  try {
+    const res = await fetch(`${origin}${LOGO_PATH}`)
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return `data:image/jpeg;base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
+function buildOgElement(origin, meta, logoSrc) {
+  const logo = logoSrc || `${origin}${LOGO_PATH}`
   const accent = meta.position?.side
     ? (meta.side === 'YES' ? meta.yes : meta.no)
     : meta.yes
@@ -290,26 +301,28 @@ function buildOgElement(origin, meta) {
   )
 }
 
-function fallbackOgElement(origin) {
+function fallbackOgElement(origin, logoSrc) {
   return buildOgElement(origin, {
     title: `${BRAND} prediction markets`,
     description: 'Trade the future on Unicity Sphere — stake UCT on real outcomes.',
     yes: 50,
     no: 50,
     isPosition: false,
-  })
+  }, logoSrc)
 }
 
-export const config = {
-  runtime: 'edge',
+async function renderPng(element) {
+  const response = new ImageResponse(element, { width: 1200, height: 630 })
+  return Buffer.from(await response.arrayBuffer())
 }
 
-export default async function handler(req) {
-  const headers = Object.fromEntries(req.headers)
-  const origin = siteOrigin({ headers })
+export default async function handler(req, res) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'sverdict.vercel.app'
+  const proto = req.headers['x-forwarded-proto'] || 'https'
+  const origin = siteOrigin({ headers: req.headers })
 
   try {
-    const url = new URL(req.url)
+    const url = new URL(req.url || '/api/og', `${proto}://${host}`)
     const code = url.searchParams.get('code') || ''
     const position = parsePositionShareParams(url.searchParams)
     const positionParam = url.searchParams.get('p') || undefined
@@ -323,22 +336,20 @@ export default async function handler(req) {
       positionParam,
     })
 
-    return new ImageResponse(buildOgElement(origin, meta), {
-      width: 1200,
-      height: 630,
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=86400',
-        'Content-Type': 'image/png',
-      },
-    })
+    const logoSrc = await fetchLogoDataUrl(origin)
+    const png = await renderPng(buildOgElement(origin, meta, logoSrc))
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400')
+    res.status(200).send(png)
   } catch {
-    return new ImageResponse(fallbackOgElement(origin), {
-      width: 1200,
-      height: 630,
-      headers: {
-        'Cache-Control': 'public, s-maxage=60',
-        'Content-Type': 'image/png',
-      },
-    })
+    try {
+      const logoSrc = await fetchLogoDataUrl(origin)
+      const png = await renderPng(fallbackOgElement(origin, logoSrc))
+      res.setHeader('Content-Type', 'image/png')
+      res.setHeader('Cache-Control', 'public, s-maxage=60')
+      res.status(200).send(png)
+    } catch (err) {
+      res.status(500).send(err instanceof Error ? err.message : 'OG image failed')
+    }
   }
 }
