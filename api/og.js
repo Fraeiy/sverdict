@@ -300,26 +300,17 @@ function fallbackOgElement(origin) {
   })
 }
 
-function requestUrl(req) {
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'sverdict.vercel.app'
-  const proto = req.headers['x-forwarded-proto'] || 'https'
-  const path = typeof req.url === 'string' ? req.url : '/api/og'
-  return new URL(path, `${proto}://${host}`)
+export const config = {
+  runtime: 'edge',
 }
 
-async function renderPng(element) {
-  const image = new ImageResponse(element, {
-    width: 1200,
-    height: 630,
-  })
-  return Buffer.from(await image.arrayBuffer())
-}
+export default async function handler(req) {
+  const headers = Object.fromEntries(req.headers)
+  const origin = siteOrigin({ headers })
 
-export default async function handler(req, res) {
   try {
-    const url = requestUrl(req)
+    const url = new URL(req.url)
     const code = url.searchParams.get('code') || ''
-    const origin = siteOrigin({ headers: req.headers })
     const position = parsePositionShareParams(url.searchParams)
     const positionParam = url.searchParams.get('p') || undefined
     const market = code ? await fetchMarketByCode(code) : null
@@ -332,21 +323,22 @@ export default async function handler(req, res) {
       positionParam,
     })
 
-    const element = buildOgElement(origin, meta)
-    const png = await renderPng(element)
-
-    res.setHeader('Content-Type', 'image/png')
-    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=86400')
-    res.status(200).send(png)
-  } catch (err) {
-    try {
-      const origin = siteOrigin({ headers: req.headers })
-      const png = await renderPng(fallbackOgElement(origin))
-      res.setHeader('Content-Type', 'image/png')
-      res.setHeader('Cache-Control', 'public, s-maxage=60')
-      res.status(200).send(png)
-    } catch {
-      res.status(500).send(err instanceof Error ? err.message : 'OG image failed')
-    }
+    return new ImageResponse(buildOgElement(origin, meta), {
+      width: 1200,
+      height: 630,
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=86400',
+        'Content-Type': 'image/png',
+      },
+    })
+  } catch {
+    return new ImageResponse(fallbackOgElement(origin), {
+      width: 1200,
+      height: 630,
+      headers: {
+        'Cache-Control': 'public, s-maxage=60',
+        'Content-Type': 'image/png',
+      },
+    })
   }
 }
