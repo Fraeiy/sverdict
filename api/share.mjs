@@ -9,12 +9,17 @@ const LOGO_PATH = '/logo.jpg'
 
 const CRAWLER_UA = /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|whatsapp|embedly|pinterest|googlebot|bingbot/i
 
+const DEFAULT_SITE = 'https://sverdict.vercel.app'
+
 function siteOrigin(req) {
   const envUrl = process.env.SITE_URL || process.env.VITE_SITE_URL
   if (envUrl) return String(envUrl).replace(/\/$/, '')
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost'
-  const proto = req.headers['x-forwarded-proto'] || 'https'
-  return `${proto}://${host}`
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  if (host && !host.includes('localhost')) {
+    const proto = req.headers['x-forwarded-proto'] || 'https'
+    return `${proto}://${host}`
+  }
+  return DEFAULT_SITE
 }
 
 function yesPct(market) {

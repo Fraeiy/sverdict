@@ -7,7 +7,7 @@ const FALLBACK_MODELS = [
   'liquid/lfm-2.5-1.2b-instruct:free',
 ]
 const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? FALLBACK_MODELS[0]
-const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sphere-predict.vercel.app'
+const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sverdict.vercel.app'
 
 export type AiMarketProposal = {
   question: string

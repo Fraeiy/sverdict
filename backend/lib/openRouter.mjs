@@ -4,7 +4,7 @@ const FALLBACK_MODELS = [
   'google/gemma-4-26b-a4b-it:free',
   'liquid/lfm-2.5-1.2b-instruct:free',
 ]
-const SITE_URL = process.env.OPENROUTER_SITE_URL || 'https://sphere-predict.vercel.app'
+const SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.SITE_URL || 'https://sverdict.vercel.app'
 
 export function openRouterModel() {
   return process.env.OPENROUTER_MODEL || DEFAULT_MODEL

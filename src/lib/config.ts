@@ -11,6 +11,12 @@ export function getTreasuryAddressFallback(): string {
   return import.meta.env.VITE_TREASURY_ADDRESS || ''
 }
 
+export function getSiteUrl(): string {
+  const env = import.meta.env.VITE_SITE_URL
+  if (env) return String(env).replace(/\/$/, '')
+  return 'https://sverdict.vercel.app'
+}
+
 export function isProductionDeploy(): boolean {
   return import.meta.env.PROD && !import.meta.env.DEV
 }

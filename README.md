@@ -1,5 +1,7 @@
 # Sverdict
 
+**Live:** [sverdict.vercel.app](https://sverdict.vercel.app)
+
 Prediction markets on [Unicity Sphere](https://sphere.unicity.network) testnet. Users connect a Sphere wallet, deposit UCT into a portfolio margin account, trade YES/NO positions instantly, and withdraw back to their wallet.
 
 Treasury: `@sphere-predict`

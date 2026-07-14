@@ -5,7 +5,9 @@
   "framework": "vite",
   "installCommand": "npm install",
   "env": {
-    "VITE_WALLET_URL": "https://sphere.unicity.network"
+    "VITE_WALLET_URL": "https://sphere.unicity.network",
+    "VITE_SITE_URL": "https://sverdict.vercel.app",
+    "SITE_URL": "https://sverdict.vercel.app"
   },
   "functions": {
     "api/share.mjs": {

@@ -1,4 +1,5 @@
 import { BRAND_NAME } from './brand'
+import { getSiteUrl } from './config'
 import type { Market, Position } from './types'
 import { fmtUct, noProbability, yesProbability } from './format'
 
@@ -6,8 +7,7 @@ export function appOrigin() {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
   }
-  const env = import.meta.env.VITE_SITE_URL
-  return env ? String(env).replace(/\/$/, '') : ''
+  return getSiteUrl()
 }
 
 /** Compact market id for URLs — first 8 hex chars of UUID. */
