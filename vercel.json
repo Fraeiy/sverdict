@@ -10,7 +10,7 @@
     "SITE_URL": "https://sverdict.vercel.app"
   },
   "functions": {
-    "api/share.mjs": {
+    "api/share.js": {
       "maxDuration": 10
     }
   },
