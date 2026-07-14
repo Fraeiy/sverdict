@@ -11,12 +11,12 @@ export function dmRecipientFromUser(user) {
 export function formatMarketWinDm({ payout, question }) {
   const q = String(question || 'market')
   const short = q.length > 80 ? `${q.slice(0, 77)}...` : q
-  return `sphere//predict: You won! ${Number(payout).toFixed(2)} UCT credited to your portfolio for "${short}". Bet again or withdraw anytime.`
+  return `Sverdict: You won! ${Number(payout).toFixed(2)} UCT credited to your portfolio for "${short}". Bet again or withdraw anytime.`
 }
 
 export function formatWithdrawalSentDm({ amount, txReference }) {
   const ref = txReference ? ` Ref: ${txReference}` : ''
-  return `sphere//predict: ${Number(amount).toFixed(2)} UCT sent to your Sphere wallet.${ref}`
+  return `Sverdict: ${Number(amount).toFixed(2)} UCT sent to your Sphere wallet.${ref}`
 }
 
 export async function sendSphereDm(sphere, recipient, content) {

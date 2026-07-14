@@ -22,7 +22,7 @@ for (const model of models) {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://sphere-predict.vercel.app',
-      'X-Title': 'sphere//predict',
+      'X-Title': 'Sverdict',
     },
     body: JSON.stringify({
       model,

@@ -84,8 +84,8 @@ export function useWalletConnect() {
   const uctDecimalsRef = useRef(UCT_DECIMALS)
 
   const dappMeta = useMemo(() => ({
-    name: 'sphere//predict',
-    description: 'Prediction markets on Sphere testnet',
+    name: 'Sverdict',
+    description: 'Prediction markets on Unicity Sphere',
     url: location.origin,
   }), [])
 

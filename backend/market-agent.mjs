@@ -42,7 +42,7 @@ async function proposeMarkets(db) {
   }
 
   const result = await askOpenRouter(
-    'You are a prediction market editor for sphere//predict on Sphere/Unicity. '
+    'You are a prediction market editor for Sverdict on Sphere/Unicity. '
     + 'Return JSON: {"markets":[{"question","description","resolutionCriteria","category","daysOpen"}]}. '
     + 'Categories: CRYPTO,SPORTS,POLITICS,TECH,FINANCE,OTHER. daysOpen 3-14. Criteria must be objective.',
     JSON.stringify(prompt),
@@ -72,7 +72,7 @@ async function reviewSettlements(db) {
   }
 
   const result = await askOpenRouter(
-    'You review prediction markets for sphere//predict. '
+    'You review prediction markets for Sverdict. '
     + 'Return JSON: {"reviews":[{"marketId","resolution":"YES"|"NO"|"UNCLEAR","confidence":0-1,"reason"}]}. '
     + 'Only YES/NO when criteria clearly met; otherwise UNCLEAR.',
     JSON.stringify({ markets }),

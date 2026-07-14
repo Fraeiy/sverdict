@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BRAND_NAME } from '../../lib/brand'
+import { BRAND_LOGO, BRAND_NAME } from '../../lib/brand'
 import { copyToClipboard, nativeShare } from '../../lib/share'
 import { fmtUct } from '../../lib/format'
 
@@ -67,9 +67,12 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
         {card && (
           <div className="card mb-4 overflow-hidden border-[rgba(245,158,11,0.28)] p-0">
             <div className="border-b border-[var(--color-border)] bg-[rgba(245,158,11,0.08)] px-4 py-3">
-              <p className="font-data text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-gold)]">
-                {BRAND_NAME}
-              </p>
+              <div className="flex items-center gap-2">
+                <img src={BRAND_LOGO} alt="" className="h-5 w-5 rounded object-cover" aria-hidden />
+                <p className="font-data text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--color-gold)]">
+                  {BRAND_NAME}
+                </p>
+              </div>
               {card.trader && (
                 <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">@{card.trader.replace(/^@/, '')}</p>
               )}

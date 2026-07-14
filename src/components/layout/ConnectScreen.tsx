@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BrandLogo } from '../ui/BrandLogo'
-import { BRAND_NAME } from '../../lib/brand'
+import { BRAND_LOGO, BRAND_NAME } from '../../lib/brand'
 
 type Wallet = {
   isAutoConnecting: boolean
@@ -18,7 +18,8 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <div className="text-center">
-          <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-2 border-[var(--color-gold)] border-t-transparent" />
+          <img src={BRAND_LOGO} alt={BRAND_NAME} className="mx-auto mb-6 h-14 w-14 rounded-lg object-cover" />
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-gold)] border-t-transparent" />
           <p className="font-data text-sm font-bold tracking-[0.08em] text-[var(--color-gold)]">{BRAND_NAME}</p>
           <p className="mt-3 font-data text-xs text-[var(--color-text-2)]">Establishing wallet connection…</p>
         </div>
@@ -31,7 +32,7 @@ export function ConnectScreen({ wallet }: { wallet: Wallet }) {
       <div className="card card-glow w-full max-w-md p-8">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-5 flex justify-center">
-            <BrandLogo size="md" />
+            <BrandLogo size="lg" />
           </div>
           <p className="label-caps mb-2">Unicity · Sphere</p>
           <h1 className="text-3xl font-bold tracking-tight">Trade the future</h1>

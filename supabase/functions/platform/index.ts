@@ -320,12 +320,12 @@ function dmRecipientFromUser(user: { nametag?: string | null; wallet_address?: s
 function formatMarketWinDm(payout: number, question: string) {
   const q = String(question || 'market')
   const short = q.length > 80 ? `${q.slice(0, 77)}...` : q
-  return `sphere//predict: You won! ${payout.toFixed(2)} UCT credited to your portfolio for "${short}". Bet again or withdraw anytime.`
+  return `Sverdict: You won! ${payout.toFixed(2)} UCT credited to your portfolio for "${short}". Bet again or withdraw anytime.`
 }
 
 function formatWithdrawalSentDm(amount: number, txReference?: string) {
   const ref = txReference ? ` Ref: ${txReference}` : ''
-  return `sphere//predict: ${amount.toFixed(2)} UCT sent to your Sphere wallet.${ref}`
+  return `Sverdict: ${amount.toFixed(2)} UCT sent to your Sphere wallet.${ref}`
 }
 
 async function queueOutboundDm(

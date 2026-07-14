@@ -46,7 +46,7 @@ async function askOpenRouterOnce(model: string, key: string, system: string, use
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': SITE_URL,
-      'X-Title': 'sphere//predict',
+      'X-Title': 'Sverdict',
     },
     body: JSON.stringify({
       model,
@@ -100,7 +100,7 @@ export async function fetchAiMarketProposals(db: SupabaseClient) {
     .limit(12)
 
   const result = await askOpenRouter(
-    'You are a prediction market editor for sphere//predict on Sphere/Unicity. '
+    'You are a prediction market editor for Sverdict on Sphere/Unicity. '
     + 'Return JSON: {"markets":[{"question","description","resolutionCriteria","category","daysOpen"}]}. '
     + 'Categories: CRYPTO,SPORTS,POLITICS,TECH,FINANCE,OTHER. daysOpen 3-14. Criteria must be objective and verifiable.',
     JSON.stringify({
@@ -132,7 +132,7 @@ export async function fetchAiSettlementReviews(db: SupabaseClient) {
   }
 
   const result = await askOpenRouter(
-    'You review prediction markets for sphere//predict. '
+    'You review prediction markets for Sverdict. '
     + 'Return JSON: {"reviews":[{"marketId","resolution":"YES"|"NO"|"UNCLEAR","confidence":0-1,"reason"}]}. '
     + 'marketId must match input ids. Only YES/NO when criteria clearly met; otherwise UNCLEAR.',
     JSON.stringify({ markets }),

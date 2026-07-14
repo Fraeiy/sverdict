@@ -41,7 +41,7 @@ export async function askOpenRouter(system, user) {
           Authorization: `Bearer ${key}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': SITE_URL,
-          'X-Title': 'sphere//predict',
+          'X-Title': 'Sverdict',
         },
         body: JSON.stringify({
           model,

@@ -1,5 +1,5 @@
 /**
- * Canonical on-chain / ledger payment memos for sphere//predict.
+ * Canonical on-chain / ledger payment memos for Sverdict.
  *
  * Format: SP:v1:<action>[:key=value...]
  * Keys (when present): uid, wid, mid, pid, side, tid
