@@ -157,6 +157,22 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
   }
 }
 
+/** True only for link-preview scrapers — not in-app browsers (WhatsApp, Telegram, etc.). */
+export function isLinkPreviewBot(userAgent) {
+  const ua = String(userAgent || '')
+  if (!ua) return false
+
+  const lower = ua.toLowerCase()
+
+  // Real interactive browsers (including WhatsApp/Telegram/Discord in-app WebViews)
+  if (/mozilla\/5\.0/i.test(ua) && /(chrome|safari|firefox|edg|opera|samsungbrowser|crios|fxios)/i.test(ua)) {
+    if (!/(googlebot|bingbot|yandexbot|duckduckbot)/i.test(lower)) return false
+  }
+
+  // WhatsApp previews use facebookexternalhit — not the bare "whatsapp" substring in app UAs
+  return /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|googlebot|bingbot/i.test(lower)
+}
+
 export function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')

@@ -8,11 +8,10 @@ import {
   buildOgHtml,
   buildShareMeta,
   fetchMarketByCode,
+  isLinkPreviewBot,
   parsePositionShareParams,
   siteOrigin,
 } from './lib/shareMeta.mjs'
-
-const CRAWLER_UA = /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|whatsapp|embedly|pinterest|googlebot|bingbot/i
 
 export default async function handler(req, res) {
   const code = String(req.query.code || '').trim()
@@ -20,7 +19,7 @@ export default async function handler(req, res) {
   const position = parsePositionShareParams(req.query)
   const positionParam = req.query.p
   const ua = String(req.headers['user-agent'] || '')
-  const isCrawler = CRAWLER_UA.test(ua)
+  const isCrawler = isLinkPreviewBot(ua)
 
   if (!code) {
     res.status(400).send('Missing share code')
@@ -37,18 +36,20 @@ export default async function handler(req, res) {
     ? `${origin}/markets/${market.id}${qs ? `?${qs}` : ''}`
     : origin
 
-  res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600')
+  res.setHeader('Vary', 'User-Agent')
 
   if (!isCrawler) {
     if (!market) {
       res.status(404).send('Market not found')
       return
     }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
     res.writeHead(302, { Location: redirect })
     res.end()
     return
   }
 
+  res.setHeader('Cache-Control', 'private, no-cache')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.status(market ? 200 : 404).send(buildOgHtml({
     ...meta,
