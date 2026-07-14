@@ -178,13 +178,17 @@ export function isLinkPreviewBot(userAgent) {
   if (!ua) return false
 
   const lower = ua.toLowerCase()
+  const trimmed = ua.trim()
 
-  // Real interactive browsers (including WhatsApp/Telegram/Discord in-app WebViews)
+  // User tapped link in WhatsApp/Telegram in-app browser (full WebView stack)
   if (/mozilla\/5\.0/i.test(ua) && /(chrome|safari|firefox|edg|opera|samsungbrowser|crios|fxios)/i.test(ua)) {
+    if (/whatsapp|telegram/i.test(lower)) return false
     if (!/(googlebot|bingbot|yandexbot|duckduckbot)/i.test(lower)) return false
   }
 
-  // WhatsApp previews use facebookexternalhit — not the bare "whatsapp" substring in app UAs
+  // WhatsApp link preview scraper: "WhatsApp/2.x" without Mozilla — not the in-app browser
+  if (/^whatsapp\//i.test(trimmed)) return true
+
   return /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|googlebot|bingbot/i.test(lower)
 }
 
