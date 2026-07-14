@@ -138,28 +138,67 @@ function userMatchesAuth(u: { wallet_address: string; nametag?: string | null },
   return false
 }
 
-async function findExistingUser(db: SupabaseClient, auth: WalletAuth) {
-  const candidates = new Set<string>()
-  for (const key of userAuthKeys(auth)) {
-    if (!key) continue
-    candidates.add(key)
-    const bare = key.replace(/^@/, '')
-    if (bare) {
-      candidates.add(bare)
-      candidates.add(`@${bare}`)
+function authLookupKeys(auth: WalletAuth) {
+  const walletKeys = new Set<string>()
+  const nametagKeys = new Set<string>()
+  for (const raw of [auth.walletAddress, auth.nametag, auth.directAddress]) {
+    if (!raw) continue
+    const s = String(raw).trim()
+    walletKeys.add(s)
+    walletKeys.add(s.toLowerCase())
+    walletKeys.add(s.toUpperCase())
+    const bare = s.replace(/^@/, '')
+    if (bare && bare !== s) {
+      walletKeys.add(bare)
+      walletKeys.add(`@${bare}`)
+      walletKeys.add(`@${bare.toLowerCase()}`)
+    }
+    if (!s.toUpperCase().startsWith('DIRECT')) {
+      const tag = bare.toLowerCase()
+      if (tag) nametagKeys.add(tag)
     }
   }
+  return { walletKeys, nametagKeys }
+}
 
-  for (const key of candidates) {
-    const { data: byWallet } = await db.from('users').select('*').eq('wallet_address', key).maybeSingle()
-    if (byWallet) return byWallet
-    const tag = key.replace(/^@/, '')
-    if (tag) {
-      const { data: byTag } = await db.from('users').select('*').eq('nametag', tag).maybeSingle()
-      if (byTag) return byTag
+async function findAllMatchingUsers(db: SupabaseClient, auth: WalletAuth) {
+  const { walletKeys, nametagKeys } = authLookupKeys(auth)
+  const byId = new Map<string, Record<string, unknown>>()
+  for (const key of walletKeys) {
+    const { data } = await db.from('users').select('*').eq('wallet_address', key)
+    for (const row of data || []) byId.set(row.id as string, row)
+  }
+  for (const tag of nametagKeys) {
+    const { data } = await db.from('users').select('*').eq('nametag', tag)
+    for (const row of data || []) byId.set(row.id as string, row)
+  }
+  return [...byId.values()]
+}
+
+async function userActivityScore(db: SupabaseClient, userId: string) {
+  const [{ count: positions }, { count: trades }, { data: bal }] = await Promise.all([
+    db.from('positions').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    db.from('trades').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    db.from('balances').select('available_balance').eq('user_id', userId).maybeSingle(),
+  ])
+  return (positions ?? 0) * 1000 + (trades ?? 0) * 10 + Number(bal?.available_balance ?? 0)
+}
+
+/** Prefer the row with real portfolio history when nametag/direct duplicates exist. */
+async function findExistingUser(db: SupabaseClient, auth: WalletAuth) {
+  const matches = await findAllMatchingUsers(db, auth)
+  if (!matches.length) return null
+  if (matches.length === 1) return matches[0]
+  let best = matches[0]
+  let bestScore = -1
+  for (const row of matches) {
+    const score = await userActivityScore(db, row.id as string)
+    if (score > bestScore) {
+      bestScore = score
+      best = row
     }
   }
-  return null
+  return best
 }
 
 async function applyUserProfilePatch(
@@ -180,7 +219,9 @@ async function findOrCreateUser(db: SupabaseClient, auth: WalletAuth) {
   const existing = await findExistingUser(db, auth)
   if (existing) return applyUserProfilePatch(db, existing, auth)
 
-  const wallet = auth.directAddress || auth.nametag || auth.walletAddress
+  const wallet = auth.directAddress
+    || (auth.nametag ? (auth.nametag.startsWith('@') ? auth.nametag : `@${auth.nametag}`) : null)
+    || auth.walletAddress
   const { data, error } = await db.from('users').insert({
     wallet_address: wallet,
     nametag: auth.nametag || null,
