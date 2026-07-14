@@ -11,6 +11,17 @@ import {
 } from '../lib/userSettings'
 import type { WalletIdentity } from '../lib/types'
 
+function settingsSyncWarning(e: unknown): string | null {
+  const msg = e instanceof Error ? e.message : ''
+  if (!msg || msg === 'Error' || msg === 'Unexpected error') {
+    return 'Could not sync settings — using preferences saved on this device.'
+  }
+  if (/non-2xx|failed to fetch|network|timeout|520/i.test(msg)) {
+    return 'Could not reach server — using preferences saved on this device.'
+  }
+  return msg
+}
+
 export function useUserSettings(identity: WalletIdentity | null) {
   const auth = useMemo(() => authFromIdentity(identity), [identity])
   const [preferences, setPreferences] = useState<UserPreferences>(loadCachedPreferences)
@@ -36,7 +47,7 @@ export function useUserSettings(identity: WalletIdentity | null) {
       }
     } catch (e) {
       setPreferences(loadCachedPreferences())
-      setError(e instanceof Error ? e.message : 'Failed to load settings')
+      setError(settingsSyncWarning(e))
     } finally {
       setLoading(false)
     }

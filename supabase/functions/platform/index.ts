@@ -74,6 +74,20 @@ function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 }
 
+function toErrorMessage(e: unknown) {
+  if (e instanceof Error) return e.message || 'Unexpected error'
+  if (e && typeof e === 'object' && 'message' in e) {
+    const msg = (e as { message?: unknown }).message
+    if (typeof msg === 'string' && msg) return msg
+  }
+  return 'Unexpected error'
+}
+
+function isDuplicateDbError(err: { code?: string; message?: string } | null | undefined) {
+  if (!err) return false
+  return err.code === '23505' || /duplicate/i.test(err.message || '')
+}
+
 function normalizeWallet(addr: string) {
   if (!addr) return ''
   const s = String(addr).trim()
@@ -148,32 +162,46 @@ async function findExistingUser(db: SupabaseClient, auth: WalletAuth) {
   return null
 }
 
+async function applyUserProfilePatch(
+  db: SupabaseClient,
+  user: Record<string, unknown>,
+  auth: WalletAuth,
+) {
+  const updates: Record<string, string | null> = {}
+  if (auth.nametag && !user.nametag) updates.nametag = auth.nametag
+  if (auth.publicKey && !user.public_key) updates.public_key = auth.publicKey
+  if (!Object.keys(updates).length) return user
+  const { data, error } = await db.from('users').update(updates).eq('id', user.id).select('*').single()
+  if (error) throw new Error(error.message)
+  return data || { ...user, ...updates }
+}
+
 async function findOrCreateUser(db: SupabaseClient, auth: WalletAuth) {
-  let user = await findExistingUser(db, auth)
-  if (!user) {
-    const wallet = auth.directAddress || auth.nametag || auth.walletAddress
-    const { data, error } = await db.from('users').insert({
-      wallet_address: wallet,
-      nametag: auth.nametag || null,
-      public_key: auth.publicKey || null,
-      is_admin: isAdminWallet(auth.walletAddress) || isAdminWallet(auth.nametag) || isAdminWallet(auth.directAddress),
-    }).select().single()
-    if (error) throw error
-    user = data
-    const { error: balInitErr } = await db.from('balances').insert({ user_id: user.id, available_balance: 0 })
-    if (balInitErr && !balInitErr.message.includes('duplicate')) {
-      console.error('balance init failed:', balInitErr.message)
+  const existing = await findExistingUser(db, auth)
+  if (existing) return applyUserProfilePatch(db, existing, auth)
+
+  const wallet = auth.directAddress || auth.nametag || auth.walletAddress
+  const { data, error } = await db.from('users').insert({
+    wallet_address: wallet,
+    nametag: auth.nametag || null,
+    public_key: auth.publicKey || null,
+    is_admin: isAdminWallet(auth.walletAddress) || isAdminWallet(auth.nametag) || isAdminWallet(auth.directAddress),
+  }).select('*').single()
+
+  if (error) {
+    // Parallel /auth + /settings + /notifications on first connect can race here.
+    if (isDuplicateDbError(error)) {
+      const raced = await findExistingUser(db, auth)
+      if (raced) return applyUserProfilePatch(db, raced, auth)
     }
-  } else {
-    const updates: Record<string, string | null> = {}
-    if (auth.nametag && !user.nametag) updates.nametag = auth.nametag
-    if (auth.publicKey && !user.public_key) updates.public_key = auth.publicKey
-    if (Object.keys(updates).length) {
-      await db.from('users').update(updates).eq('id', user.id)
-      user = { ...user, ...updates }
-    }
+    throw new Error(error.message || 'Failed to create user')
   }
-  return user
+
+  const { error: balInitErr } = await db.from('balances').insert({ user_id: data.id, available_balance: 0 })
+  if (balInitErr && !balInitErr.message.includes('duplicate')) {
+    console.error('balance init failed:', balInitErr.message)
+  }
+  return data
 }
 
 async function getBalance(db: SupabaseClient, userId: string) {
@@ -998,10 +1026,10 @@ Deno.serve(async (req) => {
     return json({ error: 'Not found' })
   } catch (e) {
     // HTTP 200 + error field — supabase.functions.invoke hides 4xx response bodies in the browser
-    return json({ error: e instanceof Error ? e.message : 'Error' })
+    return json({ error: toErrorMessage(e) })
   }
   } catch (e) {
     console.error('[platform] unhandled:', e)
-    return json({ error: e instanceof Error ? e.message : 'Internal error' })
+    return json({ error: toErrorMessage(e) })
   }
 })

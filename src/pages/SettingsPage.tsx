@@ -119,7 +119,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
       </p>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.1)] px-4 py-3 text-sm text-[var(--color-no)]">
+        <div className="mt-4 rounded-lg border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] px-4 py-3 text-sm text-[var(--color-text-2)]">
           {error}
         </div>
       )}
