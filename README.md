@@ -36,7 +36,7 @@ Trades settle in a **portfolio ledger** (Supabase Postgres). Deposits and withdr
 |-------|------|
 | **Frontend** | React + Vite on Vercel — markets, portfolio, admin, settings |
 | **API** | Supabase edge function `platform` — auth, trades, deposits, withdrawals |
-| **Database** | Postgres — users, markets, positions, ledger, notifications |
+| **Database** | Postgres — users, markets, positions, ledger, notifications (RLS on all tables; public read only on `markets` + `treasury_config`) |
 | **Wallet** | Sphere Connect — deposits (user signs), identity |
 | **Agents** | `treasury-worker` fulfills withdrawals; `dm-worker` sends Sphere DMs on win/withdrawal |
 
@@ -122,7 +122,7 @@ npm run build
 src/                    React frontend (pages, hooks, components)
 supabase/
   functions/platform/   Edge API (trades, deposits, admin, settings)
-  migrations/           Postgres schema (001–011)
+  migrations/           Postgres schema (001–016)
 backend/
   treasury-worker.mjs   Autonomous withdrawal agent
   dm-worker.mjs         Sphere DM delivery agent
@@ -130,6 +130,12 @@ backend/
   lib/marketState.mjs   Old packet protocol (dev:full only)
 .github/workflows/      Treasury agent cron (every 5 min)
 ```
+
+## Security
+
+- **RLS** — All public tables use Row Level Security. Only `markets` and `treasury_config` allow anonymous `SELECT`. Internal tables (`users`, `balances`, `claims`, `outbound_dms`, `treasury_status`, etc.) are blocked from the browser; the `platform` edge function uses the **service role** server-side.
+- **Secrets** — Never commit `.env`. Use Vercel / Supabase / GitHub secrets for `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, and `TREASURY_MNEMONIC`. The anon key in the frontend is expected to be public; service role must not ship to the client.
+- **Apply migrations** — After pulling, run `npm run supabase:push` so RLS changes (e.g. `016_enable_rls_internal_tables.sql`) are applied.
 
 ## Tech stack
 
