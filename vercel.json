@@ -13,7 +13,7 @@
     "api/share.js": {
       "maxDuration": 10
     },
-    "api/og.jsx": {
+    "api/og.js": {
       "maxDuration": 10
     }
   },
