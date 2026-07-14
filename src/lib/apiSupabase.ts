@@ -35,6 +35,9 @@ async function invoke<T>(route: string, init?: { method?: string; payload?: unkn
         } catch { /* use message above */ }
       }
     }
+    if (msg.includes('non-2xx') || msg.includes('Edge Function')) {
+      msg = 'Request failed — hard refresh (Ctrl+Shift+R) and retry. If Admin AI: wait 60s, ensure you are connected as @sphere-predict.'
+    }
     const hint = msg.includes('Not found') || error.message?.includes('404')
       ? ' — run npm run supabase:deploy'
       : ''

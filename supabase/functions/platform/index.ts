@@ -575,7 +575,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (!walletAddress) return json({ error: 'Wallet authentication required' }, 401)
+    if (!walletAddress) return json({ error: 'Wallet authentication required' })
     const user = await findOrCreateUser(db, { walletAddress, nametag, directAddress, publicKey })
 
     if (route === '/auth') return json({ user, portfolio: await getPortfolio(db, user.id) })
@@ -736,7 +736,7 @@ Deno.serve(async (req) => {
     }
 
     const admin = user.is_admin || isAdminWallet(walletAddress) || isAdminWallet(nametag)
-    if (!admin) return json({ error: 'Admin access required' }, 403)
+    if (!admin) return json({ error: 'Admin access required' })
 
     if (route === '/admin/dashboard') {
       const [treasury, withdrawals, seeds] = await Promise.all([
@@ -970,8 +970,9 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
-    return json({ error: 'Not found' }, 404)
+    return json({ error: 'Not found' })
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : 'Error' }, 400)
+    // HTTP 200 + error field — supabase.functions.invoke hides 4xx response bodies in the browser
+    return json({ error: e instanceof Error ? e.message : 'Error' })
   }
 })
