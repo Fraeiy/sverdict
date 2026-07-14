@@ -5,9 +5,11 @@ import { displayName } from '../../lib/format'
 
 type Props = {
   identity: { nametag?: string; directAddress?: string } | null
+  isConnected: boolean
   balanceHuman: string
   isAdmin?: boolean
   notificationUnread?: number
+  onConnect: () => void
   onDisconnect: () => void
 }
 
@@ -17,7 +19,7 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: 'settings' as const },
 ]
 
-export function AppShell({ identity, balanceHuman, isAdmin, notificationUnread = 0, onDisconnect }: Props) {
+export function AppShell({ identity, isConnected, balanceHuman, isAdmin, notificationUnread = 0, onConnect, onDisconnect }: Props) {
   const location = useLocation()
 
   function navActive(to: string) {
@@ -69,21 +71,32 @@ export function AppShell({ identity, balanceHuman, isAdmin, notificationUnread =
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 sm:flex">
-              <span className="live-dot" />
-              <div className="text-right">
-                <p className="font-data text-[11px] font-bold text-[var(--color-text)]">{displayName(identity)}</p>
-                <p className="font-data text-[10px] text-[var(--color-gold)]">
-                  {balanceHuman === '—' ? '—' : `${balanceHuman} UCT`}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onDisconnect}
-              className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] font-bold uppercase tracking-wider"
-            >
-              Disconnect
-            </button>
+            {isConnected ? (
+              <>
+                <div className="hidden items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 sm:flex">
+                  <span className="live-dot" />
+                  <div className="text-right">
+                    <p className="font-data text-[11px] font-bold text-[var(--color-text)]">{displayName(identity)}</p>
+                    <p className="font-data text-[10px] text-[var(--color-gold)]">
+                      {balanceHuman === '—' ? '—' : `${balanceHuman} UCT`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={onDisconnect}
+                  className="btn-ghost rounded-md px-3 py-1.5 font-data text-[10px] font-bold uppercase tracking-wider"
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onConnect}
+                className="btn-gold rounded-md px-4 py-2 font-data text-[10px] font-bold uppercase tracking-wider"
+              >
+                Connect
+              </button>
+            )}
           </div>
         </div>
       </header>

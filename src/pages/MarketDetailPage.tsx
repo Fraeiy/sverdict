@@ -13,10 +13,13 @@ import { fmtUct, noProbability, timeRemaining, yesProbability } from '../lib/for
 
 type Props = {
   identity: import('../lib/types').WalletIdentity | null
+  isConnected: boolean
+  isConnecting?: boolean
+  onConnect: () => void
   onToast: (msg: string, type?: 'success' | 'error' | 'info') => void
 }
 
-export function MarketDetailPage({ identity, onToast }: Props) {
+export function MarketDetailPage({ identity, isConnected, isConnecting, onConnect, onToast }: Props) {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -192,6 +195,21 @@ export function MarketDetailPage({ identity, onToast }: Props) {
             Treasury is sending on-chain UCT to open this market. Trading will unlock in a few minutes.
           </p>
         </div>
+      ) : !isConnected ? (
+        <div className="card card-glow mt-8 p-8 text-center">
+          <p className="label-caps mb-2 text-[var(--color-gold)]">Trade this market</p>
+          <p className="text-sm leading-relaxed text-[var(--color-text-2)]">
+            Browse odds and market details without signing in. Connect your Sphere wallet when you&apos;re ready to stake on YES or NO.
+          </p>
+          <button
+            type="button"
+            onClick={onConnect}
+            disabled={isConnecting}
+            className="btn-gold mt-6 rounded-lg px-8 py-4 font-data text-sm uppercase tracking-wider disabled:opacity-50"
+          >
+            {isConnecting ? 'Connecting…' : 'Connect wallet to trade'}
+          </button>
+        </div>
       ) : isOpen ? (
         <div className="card card-glow mt-8 p-6">
           <p className="label-caps mb-4">Execute position</p>
@@ -272,9 +290,19 @@ export function MarketDetailPage({ identity, onToast }: Props) {
               ? `Resolved: ${market.resolution || market.resolved_outcome}`
               : 'This market is closed'}
           </p>
-          <Link to="/portfolio" className="mt-4 inline-block font-data text-[11px] text-[var(--color-gold)] hover:underline">
-            VIEW PORTFOLIO →
-          </Link>
+          {isConnected ? (
+            <Link to="/portfolio" className="mt-4 inline-block font-data text-[11px] text-[var(--color-gold)] hover:underline">
+              VIEW PORTFOLIO →
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={onConnect}
+              className="mt-4 font-data text-[11px] text-[var(--color-gold)] hover:underline"
+            >
+              CONNECT TO TRADE →
+            </button>
+          )}
         </div>
       )}
 

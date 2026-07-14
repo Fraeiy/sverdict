@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/layout/AppShell'
-import { ConnectScreen } from './components/layout/ConnectScreen'
+import { ConnectPrompt } from './components/layout/ConnectPrompt'
 import { Toast } from './components/ui/Toast'
 import { useNotifications } from './hooks/useNotifications'
 import { usePlatform } from './hooks/usePlatform'
@@ -46,10 +46,6 @@ export default function App() {
     )
   }
 
-  if (!wallet.isConnected) {
-    return <ConnectScreen wallet={wallet} />
-  }
-
   if (wallet.isWalletLocked) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -70,9 +66,11 @@ export default function App() {
           element={
             <AppShell
               identity={wallet.identity}
+              isConnected={wallet.isConnected}
               balanceHuman={wallet.balanceHuman}
-              isAdmin={platform.isAdmin}
-              notificationUnread={notificationUnread}
+              isAdmin={wallet.isConnected && platform.isAdmin}
+              notificationUnread={wallet.isConnected ? notificationUnread : 0}
+              onConnect={wallet.connect}
               onDisconnect={wallet.disconnect}
             />
           }
@@ -82,22 +80,36 @@ export default function App() {
             path="markets/:id"
             element={
               <Suspense fallback={<PageFallback />}>
-                <MarketDetailPage identity={wallet.identity} onToast={showToast} />
+                <MarketDetailPage
+                  identity={wallet.identity}
+                  isConnected={wallet.isConnected}
+                  onConnect={wallet.connect}
+                  isConnecting={wallet.isConnecting}
+                  onToast={showToast}
+                />
               </Suspense>
             }
           />
           <Route
             path="portfolio"
             element={
-              <Suspense fallback={<PageFallback />}>
-                <PortfolioPage
-                  identity={wallet.identity}
-                  treasuryAddress={platform.treasuryAddress}
-                  userId={platform.user?.id}
+              wallet.isConnected ? (
+                <Suspense fallback={<PageFallback />}>
+                  <PortfolioPage
+                    identity={wallet.identity}
+                    treasuryAddress={platform.treasuryAddress}
+                    userId={platform.user?.id}
+                    wallet={wallet}
+                    onToast={showToast}
+                  />
+                </Suspense>
+              ) : (
+                <ConnectPrompt
                   wallet={wallet}
-                  onToast={showToast}
+                  title="Portfolio"
+                  description="Connect your Sphere wallet to view positions, deposit margin, and withdraw."
                 />
-              </Suspense>
+              )
             }
           />
           <Route
@@ -115,13 +127,21 @@ export default function App() {
           <Route
             path="settings"
             element={
-              <Suspense fallback={<PageFallback />}>
-                <SettingsPage
-                  identity={wallet.identity}
-                  onDisconnect={wallet.disconnect}
-                  onToast={showToast}
+              wallet.isConnected ? (
+                <Suspense fallback={<PageFallback />}>
+                  <SettingsPage
+                    identity={wallet.identity}
+                    onDisconnect={wallet.disconnect}
+                    onToast={showToast}
+                  />
+                </Suspense>
+              ) : (
+                <ConnectPrompt
+                  wallet={wallet}
+                  title="Settings"
+                  description="Connect your Sphere wallet to manage your profile and notification preferences."
                 />
-              </Suspense>
+              )
             }
           />
         </Route>
