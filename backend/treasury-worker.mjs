@@ -155,6 +155,49 @@ async function refreshSpendableInventory(sphere) {
   return getUctBalance(sphere)
 }
 
+/** Sync wallet-api + mailbox before spend — reduces lineage CONFLICT after parallel sessions. */
+async function refreshSpendableInventoryDeep(sphere) {
+  try {
+    if (typeof sphere.payments.waitForPendingOperations === 'function') {
+      await sphere.payments.waitForPendingOperations()
+    }
+  } catch { /* best-effort */ }
+  try {
+    await sphere.payments.sync()
+  } catch { /* best-effort */ }
+  try {
+    await sphere.payments.receive()
+  } catch { /* best-effort */ }
+  return getUctBalance(sphere)
+}
+
+async function sendUct(sphere, params, { label = 'send', retries = 2 } = {}) {
+  let lastErr
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.warn(`[treasury-agent] retrying ${label} (attempt ${attempt}/${retries}) after inventory refresh…`)
+        await refreshSpendableInventoryDeep(sphere)
+        await new Promise(r => setTimeout(r, 2500))
+      }
+      const result = await sphere.payments.send({
+        transferMode: 'conservative',
+        ...params,
+      })
+      if (typeof sphere.payments.waitForPendingOperations === 'function') {
+        await sphere.payments.waitForPendingOperations()
+      }
+      return result
+    } catch (e) {
+      lastErr = e
+      const reason = e instanceof Error ? e.message : String(e)
+      if (attempt < retries && isTransientInventoryError(reason)) continue
+      throw e
+    }
+  }
+  throw lastErr
+}
+
 async function getBalance(db, userId) {
   const { data } = await db.from('balances').select('available_balance').eq('user_id', userId).single()
   return Number(data?.available_balance || 0)
@@ -179,8 +222,19 @@ async function notify(db, userId, title, body, metadata = {}) {
   if (error) console.warn('[treasury-agent] notify failed:', error.message)
 }
 
+function isTransientInventoryError(reason) {
+  const r = String(reason)
+  return /insufficient balance/i.test(r)
+    || /lineage conflict/i.test(r)
+    || /stale state/i.test(r)
+    || /inventory\/apply/i.test(r)
+    || /token storage save failed/i.test(r)
+    || /\bCONFLICT\b/i.test(r)
+}
+
+/** @deprecated use isTransientInventoryError */
 function isSpendableInventoryError(reason) {
-  return /insufficient balance/i.test(reason)
+  return isTransientInventoryError(reason)
 }
 
 function isSendSettled(status) {
@@ -345,18 +399,15 @@ async function processMarketSeeds(db, sphere, { dryRun = false } = {}) {
         `[treasury-agent] seeding ${formatWithdrawalAmount(amount)} UCT on-chain for market ${market.id} `
         + `(self-attest → ${recipient})`,
       )
-      const result = await sphere.payments.send({
+      await refreshSpendableInventoryDeep(sphere)
+      const result = await sendUct(sphere, {
         recipient,
         amount: String(sendRaw),
         coinId: 'UCT',
         memo,
-        transferMode: 'conservative',
-      })
+      }, { label: `seed ${market.id}` })
       sendCompleted = true
 
-      if (typeof sphere.payments.waitForPendingOperations === 'function') {
-        await sphere.payments.waitForPendingOperations()
-      }
       if (!isSendSettled(result?.status)) {
         throw new Error(`Seed send did not settle (status=${result?.status || 'unknown'})`)
       }
@@ -486,6 +537,7 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         continue
       }
 
+      await refreshSpendableInventoryDeep(sphere)
       await prepareInventoryForWithdrawal(sphere, sendRaw)
       const inventory = summarizeUctInventory(sphere)
       const estDeliveries = estimateDeliveryCount(inventory.tokens, sendRaw)
@@ -506,18 +558,13 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
       console.log(
         `[treasury-agent] sending ${formatWithdrawalAmount(amount)} UCT (raw=${sendRaw}, decimals=${treasuryUctDecimals}) → ${recipient} (${w.id})`,
       )
-      const result = await sphere.payments.send({
+      const result = await sendUct(sphere, {
         recipient,
         amount: String(sendRaw),
         coinId: 'UCT',
         memo,
-        transferMode: 'conservative',
-      })
+      }, { label: `withdrawal ${w.id}` })
       sendCompleted = true
-
-      if (typeof sphere.payments.waitForPendingOperations === 'function') {
-        await sphere.payments.waitForPendingOperations()
-      }
 
       if (!isSendSettled(result?.status)) {
         throw new Error(`Send did not settle (status=${result?.status || 'unknown'})`)
@@ -598,7 +645,7 @@ async function failWithdrawal(db, w, reason, { recredit = false, requeue = false
     }).eq('id', w.id)
     if (error) console.error(`[treasury-agent] requeue ${w.id} failed:`, error.message)
     console.warn(
-      `[treasury-agent] requeued ${w.id} — spendable inventory low in agent (wallet is funded; verify mnemonic + deviceId match @sphere-predict wallet-api session)`,
+      `[treasury-agent] requeued ${w.id} — transient inventory error (do not open @sphere-predict in Sphere browser while agent runs; verify TREASURY_DEVICE_ID)`,
     )
     return
   }
