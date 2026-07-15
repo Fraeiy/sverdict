@@ -91,18 +91,30 @@ async function initSphere() {
 let treasuryUctDecimals = getUctDecimals()
 
 async function getUctBalance(sphere) {
-  const assets = await sphere.payments.getAssets()
-  const uct = (assets || []).find(a => isUctAsset(a, treasuryUctCoinId))
   const decimals = treasuryUctDecimals
-  const rawStr = uct?.totalAmount ?? uct?.balance ?? uct?.amount ?? '0'
-  const raw = BigInt(String(rawStr || 0))
-  return { raw, decimals, human: rawToHuman(raw, decimals), asset: uct }
+  const inventory = summarizeUctInventory(sphere, decimals)
+  let raw = inventory.totalRaw
+  let asset = null
+  try {
+    const assets = await sphere.payments.getAssets()
+    asset = (assets || []).find(a => isUctAsset(a, treasuryUctCoinId))
+    const assetRaw = BigInt(String(asset?.totalAmount ?? asset?.balance ?? asset?.amount ?? 0))
+    if (assetRaw > raw) raw = assetRaw
+  } catch { /* token inventory is authoritative fallback */ }
+  return {
+    raw,
+    decimals,
+    human: rawToHuman(raw, decimals),
+    asset,
+    tokenCount: inventory.tokenCount,
+  }
 }
 
 function logUctBalance(bal, phase = '') {
   const label = phase ? ` ${phase}` : ''
+  const coins = bal.tokenCount != null ? `, ${bal.tokenCount} coin(s)` : ''
   console.log(
-    `[treasury-agent] spendable UCT${label}: ~${bal.human.toFixed(4)} (raw=${bal.raw}, decimals=${bal.decimals})`,
+    `[treasury-agent] spendable UCT${label}: ~${bal.human.toFixed(4)} (raw=${bal.raw}, decimals=${bal.decimals}${coins})`,
   )
 }
 
@@ -522,17 +534,22 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         continue
       }
 
-      let bal = await refreshSpendableInventory(sphere)
+      let bal = await refreshSpendableInventoryDeep(sphere)
       if (bal.raw < sendRaw) {
         console.warn(
-          `[treasury-agent] agent inventory raw=${bal.raw} < needed ${sendRaw} — @sphere-predict is funded; check TREASURY_MNEMONIC / TREASURY_DEVICE_ID match the browser wallet`,
+          `[treasury-agent] agent inventory raw=${bal.raw} < needed ${sendRaw} — `
+          + 'if @sphere-predict shows UCT in Sphere browser, close that session and set GitHub secret TREASURY_DEVICE_ID from agent logs',
         )
-        bal = await refreshSpendableInventory(sphere)
+        bal = await refreshSpendableInventoryDeep(sphere)
       }
       if (bal.raw < sendRaw) {
-        await failWithdrawal(db, w, `Treasury has only ${formatWithdrawalAmount(bal.human)} UCT spendable on-chain`, {
-          recredit: true,
-          requeue: false,
+        const zeroSession = bal.raw === 0n
+        const msg = zeroSession
+          ? 'Treasury agent sees 0 UCT spendable — wallet-api session drift (browser @sphere-predict login conflicts with agent deviceId)'
+          : `Treasury has only ${formatWithdrawalAmount(bal.human)} UCT spendable on-chain`
+        await failWithdrawal(db, w, msg, {
+          recredit: !zeroSession,
+          requeue: zeroSession,
         })
         continue
       }

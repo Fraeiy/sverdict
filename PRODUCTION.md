@@ -208,5 +208,6 @@ The treasury worker logs `used N source token(s)` when this happens. If the tota
 | Settings/notifications 404 | `npm run supabase:deploy` |
 | Wallet history empty / RPC error | `npm run supabase:push` (migration 004+) |
 | Withdrawals stuck in `submitted` | Check GitHub Actions secrets + treasury balance; verify `treasury_status.updated_at` is recent |
+| Agent says `0 UCT spendable` but Sphere shows ~500 UCT on `@sphere-predict` | **Do not open `@sphere-predict` in Sphere browser** while the agent runs. Copy `deviceId=…` from the latest Treasury Agent log → GitHub secret `TREASURY_DEVICE_ID`. Re-run workflow. Optional: delete Actions cache key `treasury-sphere-*` then run once locally with `TREASURY_MNEMONIC` + `npm run treasury:worker` to re-ingest mailbox. |
 | Treasury agent runs ~50+ min apart | Normal GitHub schedule delay — use Run workflow, external cron, or `treasury:worker:loop` on a VPS |
 | DMs not arriving | Confirm user prefs (`dmOnWin` / `dmOnWithdrawal`); run `dm:worker` |
