@@ -313,7 +313,7 @@ export function SettingsPage({ identity, onDisconnect, onToast }: Props) {
             trades execute instantly from your in-app balance.
           </p>
           <a
-            href="https://github.com/Fraeiy/sphere-predict"
+            href="https://github.com/Fraeiy/sverdict"
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 inline-block font-data text-[11px] text-[var(--color-gold)] hover:underline"

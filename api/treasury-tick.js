@@ -5,10 +5,10 @@
  * Vercel env (server-only, never VITE_*):
  *   GITHUB_PAT   — classic PAT with repo scope (or fine-grained Actions write)
  *   CRON_SECRET  — random string; Vercel sends Authorization: Bearer <CRON_SECRET>
- *   GITHUB_REPO  — optional, default Fraeiy/sphere-predict
+ *   GITHUB_REPO  — optional, default Fraeiy/sverdict
  */
 
-const REPO = process.env.GITHUB_REPO || 'Fraeiy/sphere-predict'
+const REPO = process.env.GITHUB_REPO || 'Fraeiy/sverdict'
 const EVENT = process.env.GITHUB_DISPATCH_EVENT || 'treasury-tick'
 
 export default async function handler(req, res) {
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
 
   const workflowDetail = await workflowRes.text()
   const hint = dispatchRes.status === 404 || workflowRes.status === 404
-    ? 'PAT cannot access this repo — use a classic PAT with repo scope from the Fraeiy account, or fine-grained with Actions:Read/Write on Fraeiy/sphere-predict. Re-paste GITHUB_PAT in Vercel (no spaces) and redeploy.'
+    ? 'PAT cannot access this repo — use a classic PAT with repo scope from the Fraeiy account, or fine-grained with Actions:Read/Write on Fraeiy/sverdict. Re-paste GITHUB_PAT in Vercel (no spaces) and redeploy.'
     : 'Check PAT expiry and permissions.'
 
   return res.status(502).json({

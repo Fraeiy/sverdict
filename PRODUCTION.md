@@ -102,7 +102,7 @@ Each trigger runs **Treasury Agent** on GitHub (18 passes, ~45s apart) — withd
 
 `GITHUB_PAT` is server-only — never prefix with `VITE_`.
 
-**If curl returns `GitHub dispatch HTTP 404`:** the PAT cannot see `Fraeiy/sphere-predict` (wrong account, missing scope, or extra whitespace).
+**If curl returns `GitHub dispatch HTTP 404`:** the PAT cannot see `Fraeiy/sverdict` (wrong account, missing scope, or extra whitespace).
 
 1. GitHub → Settings → Developer settings → **Personal access tokens → Tokens (classic)**
 2. Generate new token — scope: **`repo`** only
@@ -145,7 +145,7 @@ npm run dm:worker:dry-run
 
 1. **Manual** — GitHub → Actions → Treasury Agent → **Run workflow**
 2. **cron-job.org** (free, no Vercel env): every **5 min**, POST to  
-   `https://api.github.com/repos/Fraeiy/sphere-predict/dispatches`  
+   `https://api.github.com/repos/Fraeiy/sverdict/dispatches`  
    Headers: `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`  
    Body: `{"event_type":"treasury-tick"}`
 3. **Windows (dev only):** `npm run treasury:schedule-install` — not needed if Vercel Cron is set up

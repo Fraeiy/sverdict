@@ -8,7 +8,7 @@
  * PAT needs `repo` scope (classic) or Actions write (fine-grained).
  */
 
-const REPO = process.env.GITHUB_REPO || 'Fraeiy/sphere-predict'
+const REPO = process.env.GITHUB_REPO || 'Fraeiy/sverdict'
 const TOKEN = process.env.GITHUB_PAT || process.env.GH_TOKEN || ''
 const EVENT = process.env.GITHUB_DISPATCH_EVENT || 'treasury-tick'
 
