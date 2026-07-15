@@ -8,6 +8,7 @@ import {
   buildWithdrawMemo,
 } from './paymentMemos.ts'
 import { fetchAiMarketProposals, fetchAiSettlementReviews } from './aiAgent.ts'
+import { deadlineFromResolveBy } from './aiMarketProposals.ts'
 import { normalizeTreasuryStatusRow } from './treasuryAmount.ts'
 
 const MARKET_SEED_LIQUIDITY_UCT = Number(Deno.env.get('MARKET_SEED_LIQUIDITY_UCT') ?? 100)
@@ -41,6 +42,15 @@ const DEFAULT_PREFERENCES = {
   confirmBeforeTrade: true,
   dmOnWin: true,
   dmOnWithdrawal: true,
+}
+
+function marketDeadlineFromPayload(payload: Record<string, unknown>) {
+  const resolveBy = String(payload.resolveBy ?? payload.resolve_by ?? '').trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(resolveBy)) {
+    return deadlineFromResolveBy(resolveBy)
+  }
+  const days = Number(payload.daysOpen || 7)
+  return new Date(Date.now() + days * 864e5).toISOString()
 }
 
 function normalizePreferences(raw: unknown) {
@@ -913,7 +923,7 @@ Deno.serve(async (req) => {
         resolution_criteria: payload.resolutionCriteria || payload.resolution_criteria || null,
         category: payload.category || 'GENERAL',
         status: seedTotal > 0 ? 'pending_seed' : 'open',
-        deadline: new Date(Date.now() + Number(payload.daysOpen || 7) * 864e5).toISOString(),
+        deadline: marketDeadlineFromPayload(payload),
         created_by: user.id,
         trending_score: seedTotal > 0 ? 0 : 10,
         yes_pool: seedTotal > 0 ? 0 : seedPerSide,

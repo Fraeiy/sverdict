@@ -128,7 +128,7 @@ backend/
   dm-worker.mjs         Sphere DM delivery agent
   server.mjs            Local dev REST API only
   lib/marketState.mjs   Old packet protocol (dev:full only)
-.github/workflows/      Treasury agent cron (every 5 min)
+.github/workflows/      Treasury agent (multi-pass) + 10 min dispatch cron
 ```
 
 ## Security

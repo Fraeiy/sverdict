@@ -75,7 +75,11 @@ Withdrawals are queued in Postgres. The **treasury agent** sends UCT on Sphere t
 
 Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loop first, then DMs).
 
-**GitHub schedule is not real-time.** Cron triggers are *best-effort* — this repo sees **60–120+ minute** gaps between scheduled runs. Each run performs **one treasury pass** (consolidate → seeds → withdrawals → DMs → publish status). Use **external cron** (`npm run treasury:trigger` every 10 min) for reliable timing.
+**GitHub schedule is not real-time.** Native schedule can gap **60–120+ minutes**. Mitigations in-repo:
+
+1. **treasury-dispatch-cron.yml** — every 10 min, uses `GITHUB_TOKEN` (no PAT required) to `repository_dispatch` the main agent.
+2. **Multi-pass runs** — each agent job runs **12 passes** (~90s apart) before exiting, so one trigger clears more of the queue.
+3. **External cron (optional)** — `npm run treasury:trigger` every 10 min from cron-job.org or Windows Task Scheduler.
 
 **If Actions shows red X at ~20m:** the job hit its timeout. Current workflow uses a single pass with a 20m timeout.
 
@@ -89,7 +93,7 @@ Check last worker activity: Supabase `treasury_status.updated_at` or Admin → o
 | `SUPABASE_URL` | Yes | Same as `VITE_SUPABASE_URL` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase Dashboard → Settings → API |
 | `SPHERE_ORACLE_API_KEY` | No | Testnet2 gateway key if needed |
-| `TREASURY_TRIGGER_PAT` | No | Same as `GITHUB_PAT` — enables `treasury-dispatch-cron` workflow |
+| `TREASURY_TRIGGER_PAT` | No | Optional PAT override for dispatch cron (default: built-in `GITHUB_TOKEN`) |
 
 Enable Actions on the repo, then run **Treasury Agent → Run workflow** once to test.
 

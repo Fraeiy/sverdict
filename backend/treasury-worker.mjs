@@ -14,7 +14,8 @@
  *
  * Usage:
  *   node backend/treasury-worker.mjs              # one pass
- *   node backend/treasury-worker.mjs --loop       # poll every 60s
+ *   node backend/treasury-worker.mjs --loop       # poll every 60s (until killed)
+ *   TREASURY_MAX_PASSES=10 npm run treasury:worker -- --loop   # N passes then exit (CI)
  *   node backend/treasury-worker.mjs --dry-run    # preview queue, no sends
  *   node backend/treasury-worker.mjs --status     # queue counts only
  */
@@ -35,6 +36,11 @@ loadProjectEnv()
 const LOOP = process.argv.includes('--loop')
 const DRY_RUN = process.argv.includes('--dry-run')
 const STATUS_ONLY = process.argv.includes('--status')
+const MAX_PASSES = Number(
+  process.argv.find(a => a.startsWith('--max-passes='))?.split('=')[1]
+  || process.env.TREASURY_MAX_PASSES
+  || 0,
+)
 const POLL_MS = Number(process.env.TREASURY_POLL_MS || 60_000)
 const MAX_AMOUNT = Number(process.env.MAX_AUTO_WITHDRAWAL_UCT || 500)
 const MAX_PER_RUN = Number(process.env.MAX_PER_RUN || 5)
@@ -647,12 +653,22 @@ async function main() {
   if (DRY_RUN || STATUS_ONLY) {
     throw new Error('--dry-run and --status cannot be used with --loop')
   }
-  console.log(`[treasury-agent] loop mode — poll every ${POLL_MS}ms`)
+  const bounded = MAX_PASSES > 0
+  console.log(
+    `[treasury-agent] loop mode — poll every ${POLL_MS}ms`
+    + (bounded ? `, max ${MAX_PASSES} pass(es)` : ''),
+  )
+  let pass = 0
   for (;;) {
+    pass += 1
     try {
       await runOnce()
     } catch (e) {
       console.error('[treasury-agent] run error:', e instanceof Error ? e.message : e)
+    }
+    if (bounded && pass >= MAX_PASSES) {
+      console.log(`[treasury-agent] completed ${pass} pass(es) — exiting`)
+      break
     }
     await new Promise(r => setTimeout(r, POLL_MS))
   }

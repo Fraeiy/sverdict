@@ -32,7 +32,7 @@ export function PendingWithdrawalBanner({ pending }: Props) {
         ))}
       </ul>
       <p className="mt-3 font-data text-[9px] leading-relaxed text-[var(--color-muted)]">
-        Treasury agent processes withdrawals when GitHub Actions runs (often every 10–15 min; can be delayed longer). This page updates when your UCT is sent.
+        Withdrawals are usually processed in about 30 minutes — sometimes faster, sometimes a bit longer.
       </p>
     </div>
   )

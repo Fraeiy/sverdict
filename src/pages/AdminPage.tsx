@@ -57,6 +57,7 @@ export function AdminPage({ platform, onToast }: Props) {
   const [criteria, setCriteria] = useState('')
   const [category, setCategory] = useState('CRYPTO')
   const [days, setDays] = useState(7)
+  const [resolveBy, setResolveBy] = useState<string | null>(null)
 
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [recent, setRecent] = useState<QueueRow[]>([])
@@ -196,9 +197,18 @@ export function AdminPage({ platform, onToast }: Props) {
     setAiLoading('proposals')
     setAiError(null)
     try {
-      const { proposals } = await platform.aiProposals()
+      const { proposals, filtered, context } = await platform.aiProposals()
       setAiProposals(proposals || [])
-      if (!proposals?.length) onToast('No new market proposals from AI', 'info')
+      if (!proposals?.length) {
+        onToast(
+          context
+            ? `No valid proposals for ${context.today} — try again (bad dates are filtered)`
+            : 'No new market proposals from AI',
+          'info',
+        )
+      } else if (filtered && filtered > 0) {
+        onToast(`Loaded ${proposals.length} proposal(s) — ${filtered} rejected (past/invalid dates)`, 'info')
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'AI proposals failed'
       setAiError(msg)
@@ -230,8 +240,9 @@ export function AdminPage({ platform, onToast }: Props) {
     setDescription(p.description || '')
     setCriteria(p.resolutionCriteria)
     if (CATEGORIES.includes(p.category)) setCategory(p.category)
-    setDays(Math.min(14, Math.max(1, Number(p.daysOpen) || 7)))
-    onToast('Proposal loaded — review criteria, then create market')
+    setDays(Math.min(90, Math.max(3, Number(p.daysOpen) || 7)))
+    setResolveBy(p.resolveBy)
+    onToast(`Proposal loaded — closes ${p.resolveBy} (${p.daysOpen}d)`)
     document.getElementById('create-market')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -247,10 +258,12 @@ export function AdminPage({ platform, onToast }: Props) {
         resolutionCriteria: criteria.trim() || undefined,
         category,
         daysOpen: days,
+        resolveBy: resolveBy || undefined,
       })
       setQuestion('')
       setDescription('')
       setCriteria('')
+      setResolveBy(null)
       await load({ trending: true, includePendingSeed: true })
       await loadDashboard()
       onToast('Market queued — treasury will seed on-chain before trading opens')
@@ -543,7 +556,9 @@ export function AdminPage({ platform, onToast }: Props) {
                 {aiProposals.map((p, i) => (
                   <div key={`${p.question}-${i}`} className="card p-4">
                     <p className="font-medium">{p.question}</p>
-                    <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">{p.category} · {p.daysOpen}d</p>
+                    <p className="mt-1 font-data text-[10px] text-[var(--color-muted)]">
+                      {p.category} · closes {p.resolveBy} ({p.daysOpen}d)
+                    </p>
                     <p className="mt-2 line-clamp-2 text-xs text-[var(--color-text-2)]">{p.resolutionCriteria}</p>
                     <button
                       type="button"
@@ -655,12 +670,18 @@ export function AdminPage({ platform, onToast }: Props) {
             <input
               type="number"
               inputMode="numeric"
-              min={1}
+              min={3}
+              max={90}
               value={days}
-              onChange={e => setDays(Number(e.target.value))}
+              onChange={e => {
+                setDays(Number(e.target.value))
+                setResolveBy(null)
+              }}
               className="w-24 rounded-xl border border-white/10 bg-[var(--color-surface-3)] px-4 py-2"
             />
-            <span className="self-center text-sm text-slate-400">days open</span>
+            <span className="self-center text-sm text-slate-400">
+              days open{resolveBy ? ` · closes ${resolveBy}` : ''}
+            </span>
           </div>
           <button
             onClick={createMarket}

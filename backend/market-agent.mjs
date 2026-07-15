@@ -16,8 +16,14 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import {
+  buildMarketProposalSystemPrompt,
+  buildMarketProposalUserPayload,
+  getProposalContext,
+  normalizeMarketProposals,
+} from './lib/aiMarketProposals.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
-import { askOpenRouter, openRouterModel } from './lib/openRouter.mjs'
+import { askOpenRouter } from './lib/openRouter.mjs'
 
 loadProjectEnv()
 
@@ -31,30 +37,33 @@ function requireEnv(name) {
 }
 
 async function proposeMarkets(db) {
+  const ctx = getProposalContext()
   const { data: existing } = await db.from('markets')
     .select('question, category, status')
     .order('created_at', { ascending: false })
     .limit(12)
 
-  const prompt = {
-    existing: (existing || []).map(m => ({ question: m.question, category: m.category, status: m.status })),
-    want: 3,
-  }
+  const existingRows = (existing || []).map(m => ({
+    question: m.question,
+    category: m.category,
+    status: m.status,
+  }))
 
   const result = await askOpenRouter(
-    'You are a prediction market editor for Sverdict on Sphere/Unicity. '
-    + 'Return JSON: {"markets":[{"question","description","resolutionCriteria","category","daysOpen"}]}. '
-    + 'Categories: CRYPTO,SPORTS,POLITICS,TECH,FINANCE,OTHER. daysOpen 3-14. Criteria must be objective.',
-    JSON.stringify(prompt),
+    buildMarketProposalSystemPrompt(ctx),
+    buildMarketProposalUserPayload(existingRows, 3, ctx),
   )
 
-  console.log('[market-agent] proposed markets:')
-  for (const m of result.markets || []) {
-    console.log(`  · ${m.question} (${m.category}, ${m.daysOpen}d)`)
+  const proposals = normalizeMarketProposals(result.markets || [], ctx, 3)
+  const filtered = Math.max(0, (result.markets || []).length - proposals.length)
+
+  console.log(`[market-agent] today=${ctx.todayIso} valid=${proposals.length} filtered=${filtered}`)
+  for (const m of proposals) {
+    console.log(`  · ${m.question} (${m.category}, closes ${m.resolveBy}, ${m.daysOpen}d)`)
     console.log(`    criteria: ${m.resolutionCriteria}`)
   }
   console.log('[market-agent] review proposals in Admin before creating markets')
-  return result.markets || []
+  return proposals
 }
 
 async function reviewSettlements(db) {
@@ -71,11 +80,12 @@ async function reviewSettlements(db) {
     return []
   }
 
+  const today = new Date().toISOString().slice(0, 10)
   const result = await askOpenRouter(
-    'You review prediction markets for Sverdict. '
+    `You review prediction markets for Sverdict. TODAY (UTC): ${today}. `
     + 'Return JSON: {"reviews":[{"marketId","resolution":"YES"|"NO"|"UNCLEAR","confidence":0-1,"reason"}]}. '
-    + 'Only YES/NO when criteria clearly met; otherwise UNCLEAR.',
-    JSON.stringify({ markets }),
+    + 'Only YES/NO when criteria clearly met as of today; otherwise UNCLEAR.',
+    JSON.stringify({ today, markets }),
   )
 
   console.log('[market-agent] settlement review:')

@@ -1,6 +1,5 @@
 # Lightweight ping — triggers Treasury Agent via repository_dispatch every 10 min.
-# Add repo secret: TREASURY_TRIGGER_PAT (classic PAT with repo scope).
-# Backup for machines without the Windows scheduled task.
+# Uses GITHUB_TOKEN by default (no extra secret). Optional override: TREASURY_TRIGGER_PAT.
 
 name: Treasury Dispatch Cron
 
@@ -8,6 +7,10 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
 
 jobs:
   dispatch:
@@ -17,16 +20,19 @@ jobs:
       - name: Trigger treasury-tick
         env:
           PAT: ${{ secrets.TREASURY_TRIGGER_PAT }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          if [ -z "$PAT" ]; then
-            echo "TREASURY_TRIGGER_PAT not set — skip (use scripts/install-treasury-scheduler.ps1 locally)"
-            exit 0
-          fi
-          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            -H "Authorization: Bearer $PAT" \
+          TOKEN="${PAT:-$GITHUB_TOKEN}"
+          code=$(curl -s -o /tmp/dispatch-body.txt -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             -H "Content-Type: application/json" \
-            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            "https://api.github.com/repos/${REPO}/dispatches" \
             -d '{"event_type":"treasury-tick"}')
           echo "dispatch HTTP $code"
-          test "$code" = "204"
+          if [ "$code" != "204" ]; then
+            cat /tmp/dispatch-body.txt
+            exit 1
+          fi

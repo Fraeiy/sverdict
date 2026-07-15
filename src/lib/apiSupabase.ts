@@ -197,6 +197,7 @@ export type AiMarketProposal = {
   resolutionCriteria: string
   category: string
   daysOpen: number
+  resolveBy: string
 }
 
 export type AiSettlementReview = {
@@ -212,6 +213,8 @@ export async function adminAiProposals(auth: AuthHeaders) {
     proposals: AiMarketProposal[]
     advisory: boolean
     model: string
+    context?: { today: string; minResolveBy: string; maxResolveBy: string }
+    filtered?: number
   }>('/admin/ai/proposals', { auth })
 }
 
@@ -277,7 +280,7 @@ export async function adminMarketSeedQueue(auth: AuthHeaders) {
 
 export async function adminCreateMarket(
   auth: AuthHeaders,
-  payload: { question: string; description?: string; resolutionCriteria?: string; category: string; daysOpen: number },
+  payload: { question: string; description?: string; resolutionCriteria?: string; category: string; daysOpen: number; resolveBy?: string },
 ) {
   return invoke<{ market: Market }>('/admin/markets', { auth, payload })
 }

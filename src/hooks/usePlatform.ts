@@ -50,6 +50,7 @@ export function usePlatform(identity: WalletIdentity | null) {
     resolutionCriteria?: string
     category: string
     daysOpen: number
+    resolveBy?: string
   }) => {
     if (!auth) throw new Error('Not connected')
     const { market } = await api.adminCreateMarket(auth, payload)

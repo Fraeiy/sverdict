@@ -1,4 +1,11 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  buildMarketProposalSystemPrompt,
+  buildMarketProposalUserPayload,
+  getProposalContext,
+  normalizeMarketProposals,
+  type AiMarketProposal,
+} from './aiMarketProposals.ts'
 
 /** openrouter/free auto-picks an available free model (old gemma-2-9b IDs are 404). */
 const FALLBACK_MODELS = [
@@ -9,13 +16,7 @@ const FALLBACK_MODELS = [
 const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? FALLBACK_MODELS[0]
 const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sverdict.vercel.app'
 
-export type AiMarketProposal = {
-  question: string
-  description?: string
-  resolutionCriteria: string
-  category: string
-  daysOpen: number
-}
+export type { AiMarketProposal }
 
 export type AiSettlementReview = {
   marketId: string
@@ -94,27 +95,32 @@ async function askOpenRouter(system: string, user: string) {
 }
 
 export async function fetchAiMarketProposals(db: SupabaseClient) {
+  const ctx = getProposalContext()
   const { data: existing } = await db.from('markets')
     .select('question, category, status')
     .order('created_at', { ascending: false })
     .limit(12)
 
+  const existingRows = (existing || []).map(m => ({
+    question: m.question,
+    category: m.category,
+    status: m.status,
+  }))
+
   const result = await askOpenRouter(
-    'You are a prediction market editor for Sverdict on Sphere/Unicity. '
-    + 'Return JSON: {"markets":[{"question","description","resolutionCriteria","category","daysOpen"}]}. '
-    + 'Categories: CRYPTO,SPORTS,POLITICS,TECH,FINANCE,OTHER. daysOpen 3-14. Criteria must be objective and verifiable.',
-    JSON.stringify({
-      existing: (existing || []).map(m => ({ question: m.question, category: m.category, status: m.status })),
-      want: 3,
-    }),
+    buildMarketProposalSystemPrompt(ctx),
+    buildMarketProposalUserPayload(existingRows, 3, ctx),
   )
 
-  const markets = (result.markets || []) as AiMarketProposal[]
+  const proposals = normalizeMarketProposals((result.markets || []) as unknown[], ctx, 3)
+
   return {
-    proposals: markets.filter(m => m.question && m.resolutionCriteria),
+    proposals,
     advisory: true,
     model: MODEL,
     provider: 'openrouter',
+    context: { today: ctx.todayIso, minResolveBy: ctx.minResolveBy, maxResolveBy: ctx.maxResolveBy },
+    filtered: Math.max(0, (result.markets || []).length - proposals.length),
   }
 }
 
@@ -131,11 +137,12 @@ export async function fetchAiSettlementReviews(db: SupabaseClient) {
     return { reviews: [] as AiSettlementReview[], advisory: true, model: MODEL, provider: 'openrouter' }
   }
 
+  const today = new Date().toISOString().slice(0, 10)
   const result = await askOpenRouter(
-    'You review prediction markets for Sverdict. '
+    `You review prediction markets for Sverdict. TODAY (UTC): ${today}. `
     + 'Return JSON: {"reviews":[{"marketId","resolution":"YES"|"NO"|"UNCLEAR","confidence":0-1,"reason"}]}. '
-    + 'marketId must match input ids. Only YES/NO when criteria clearly met; otherwise UNCLEAR.',
-    JSON.stringify({ markets }),
+    + 'marketId must match input ids. Only YES/NO when criteria clearly met as of today; otherwise UNCLEAR.',
+    JSON.stringify({ today, markets }),
   )
 
   const byId = new Map(markets.map(m => [m.id, m.question]))
