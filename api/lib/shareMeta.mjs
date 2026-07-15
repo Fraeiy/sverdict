@@ -1,3 +1,5 @@
+import { pnlMemeFor } from './pnlMeme.mjs'
+
 export const BRAND = 'Sverdict'
 export const LOGO_PATH = '/logo.jpg'
 export const DEFAULT_SITE = 'https://sverdict.vercel.app'
@@ -29,24 +31,27 @@ export function fmtUct(n) {
   return `${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} UCT`
 }
 
-/** Compact query: p=YES,25,5,fraey — mirrors src/lib/share.ts */
+/** Compact query: p=YES,25,5,fraey,resolved — mirrors src/lib/share.ts */
 export function parsePositionShareParams(query) {
   const compact = typeof query?.get === 'function' ? query.get('p') : query?.p
   if (!compact) return null
 
   const raw = Array.isArray(compact) ? compact[0] : compact
-  const [side, stakeRaw, pnlRaw, valueRaw, by] = String(raw).split(',')
+  const parts = String(raw).split(',')
+  const [side, stakeRaw, pnlRaw, valueRaw, by, status] = parts
   const stake = Number(stakeRaw)
   const pnl = Number(pnlRaw)
   if (!side || !Number.isFinite(stake) || !Number.isFinite(pnl)) return null
 
   const value = Number(valueRaw)
+  const resolved = status === 'resolved' || parts[parts.length - 1] === 'resolved'
   return {
     side,
     stake,
     pnl,
     value: Number.isFinite(value) ? value : undefined,
-    by: by || undefined,
+    by: by && by !== 'resolved' ? by : undefined,
+    resolved,
   }
 }
 
@@ -144,12 +149,27 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
   const trader = position?.by?.replace(/^@/, '')
   const creator = market.creator_nametag?.replace(/^@/, '') || undefined
 
+  const isResolved = !!position?.resolved
+  const meme = position
+    ? pnlMemeFor(position.pnl, position.stake, {
+        resolved: isResolved,
+        wonOutcome: (position.value ?? 0) > 0,
+      })
+    : null
+
   let description
   if (position) {
     const pnlLabel = `${position.pnl >= 0 ? '+' : ''}${fmtUct(position.pnl)}`
-    description = trader
-      ? `@${trader} · ${side} · Staked ${fmtUct(position.stake)} · PnL ${pnlLabel}`
-      : `${side} · Staked ${fmtUct(position.stake)} · PnL ${pnlLabel} — ${BRAND}`
+    if (isResolved) {
+      const payoutLabel = position.value != null ? fmtUct(position.value) : null
+      description = trader
+        ? `@${trader} · ${side} · ${meme.caption} ${meme.emoji} · Realized ${pnlLabel}${payoutLabel ? ` · Payout ${payoutLabel}` : ''}`
+        : `${side} · ${meme.caption} · Realized PnL ${pnlLabel} — ${BRAND}`
+    } else {
+      description = trader
+        ? `@${trader} · ${side} · Staked ${fmtUct(position.stake)} · PnL ${pnlLabel}`
+        : `${side} · Staked ${fmtUct(position.stake)} · PnL ${pnlLabel} — ${BRAND}`
+    }
   } else {
     description = `${yes}% YES · ${no}% NO — ${BRAND} prediction market on Sphere`
   }
@@ -168,6 +188,8 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
     trader,
     creator,
     isPosition: !!position,
+    isResolved,
+    meme,
     isFallback: false,
   }
 }

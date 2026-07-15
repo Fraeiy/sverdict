@@ -9,6 +9,7 @@ import {
   parsePositionShareParams,
   siteOrigin,
 } from './lib/shareMeta.mjs'
+import { pnlMemeFor } from './lib/pnlMeme.mjs'
 
 const h = React.createElement
 
@@ -138,6 +139,14 @@ function buildOgElement(origin, meta, logoSrc) {
       },
     }, `${meta.yes}% YES`)
 
+  const resolved = meta.isResolved
+  const meme = meta.meme || (resolved && meta.position
+    ? pnlMemeFor(meta.position.pnl, meta.position.stake, {
+        resolved: true,
+        wonOutcome: (meta.position.value ?? 0) > 0,
+      })
+    : null)
+
   const footer = meta.isPosition && meta.position
     ? h('div', {
       style: {
@@ -153,12 +162,12 @@ function buildOgElement(origin, meta, logoSrc) {
     statCell('Side', side || '—', badgeColor),
     statCell('Staked', fmtUct(meta.position.stake)),
     statCell(
-      'PnL',
+      resolved ? 'Realized PnL' : 'PnL',
       `${meta.position.pnl >= 0 ? '+' : ''}${fmtUct(meta.position.pnl)}`,
       meta.position.pnl >= 0 ? COLORS.yes : COLORS.no,
     ),
     statCell(
-      'Est. value',
+      resolved ? 'Payout' : 'Est. value',
       meta.position.value != null ? fmtUct(meta.position.value) : '—',
       COLORS.goldBright,
     ),
@@ -223,11 +232,39 @@ function buildOgElement(origin, meta, logoSrc) {
   },
   h('img', {
     src: logo,
-    width: 160,
-    height: 160,
+    width: resolved && meme ? 120 : 160,
+    height: resolved && meme ? 120 : 160,
     style: { borderRadius: 20, objectFit: 'cover' },
   }),
   ),
+  resolved && meme
+    ? h('div', {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 8,
+        padding: '12px 20px 20px',
+      },
+    },
+    h('div', {
+      style: {
+        fontSize: 40,
+        lineHeight: 1.1,
+        letterSpacing: '0.05em',
+      },
+    }, meme.emoji),
+    h('div', {
+      style: {
+        fontSize: 13,
+        fontWeight: 700,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: meta.position?.pnl >= 0 ? COLORS.yes : COLORS.no,
+      },
+    }, meme.label),
+    )
+    : null,
   h('div', { style: { height: 10, background: '#1a1a1a', display: 'flex' } },
     h('div', {
       style: {
@@ -294,7 +331,9 @@ function buildOgElement(origin, meta, logoSrc) {
       color: COLORS.muted,
       marginBottom: 20,
     },
-  }, truncate(meta.description, 120)),
+  }, resolved && meme
+    ? `${meme.caption} · ${meta.position?.pnl >= 0 ? '+' : ''}${fmtUct(meta.position?.pnl ?? 0)}`
+    : truncate(meta.description, 120)),
   footer,
   ),
   ),

@@ -24,6 +24,8 @@ type Props = {
     value?: number
     pnl?: number
     trader?: string
+    resolved?: boolean
+    meme?: { emoji: string; label: string; caption: string }
   }
 }
 
@@ -103,6 +105,30 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
           </div>
         )}
 
+        {card?.meme && (
+          <div
+            className={`mb-4 flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
+              pnl > 0
+                ? 'border-[rgba(74,222,128,0.35)] bg-[rgba(74,222,128,0.08)]'
+                : pnl < 0
+                  ? 'border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)]'
+                  : 'border-[var(--color-border)] bg-[var(--color-surface-4)]'
+            }`}
+          >
+            <span className="text-2xl leading-none" aria-hidden>{card.meme.emoji}</span>
+            <div>
+              <p className="font-data text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                {card.meme.label} · {card.meme.caption}
+              </p>
+              {card.pnl != null && (
+                <p className={`font-data text-sm font-bold ${pnl >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
+                  {pnl >= 0 ? '+' : ''}{fmtUct(pnl)} {card.resolved ? 'realized' : ''}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {card && (card.side || card.stake != null || card.pnl != null) && (
           <div className="mb-4 grid grid-cols-3 gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-4)] p-3">
             {card.side && (
@@ -121,10 +147,16 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
             )}
             {card.pnl != null && (
               <div>
-                <p className="label-caps">PnL</p>
+                <p className="label-caps">{card.resolved ? 'Realized' : 'PnL'}</p>
                 <p className={`mt-1 font-data text-sm font-bold ${pnl >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
                   {pnl >= 0 ? '+' : ''}{fmtUct(pnl)}
                 </p>
+              </div>
+            )}
+            {card.resolved && card.value != null && (
+              <div className="col-span-3 border-t border-[var(--color-border)] pt-2">
+                <p className="label-caps">Payout</p>
+                <p className="mt-1 font-data text-sm font-bold text-[var(--color-gold)]">{fmtUct(card.value)}</p>
               </div>
             )}
           </div>

@@ -4,11 +4,12 @@ import { FundingPanel } from '../components/portfolio/FundingPanel'
 import { HistoryList } from '../components/portfolio/HistoryList'
 import { PendingWithdrawalBanner } from '../components/portfolio/PendingWithdrawalBanner'
 import { PositionCard } from '../components/portfolio/PositionCard'
+import { ResolvedPositionCard } from '../components/portfolio/ResolvedPositionCard'
 import { useHistory } from '../hooks/useHistory'
 import { usePositions } from '../hooks/usePositions'
 import { useSpherePayment } from '../hooks/useSpherePayment'
 import type { WalletIdentity } from '../lib/types'
-import { fmtUct, realizedPnl } from '../lib/format'
+import { fmtUct } from '../lib/format'
 
 type Tab = 'overview' | 'positions' | 'history'
 
@@ -237,34 +238,14 @@ export function PortfolioPage({ identity, treasuryAddress, userId, wallet, onToa
                 <p className="font-data text-sm text-[var(--color-muted)]">No resolved positions yet</p>
               ) : (
                 <div className="space-y-3">
-                  {resolvedPositions.map(p => {
-                    const stake = Number(p.stake_amount ?? p.cost_basis ?? 0)
-                    const payout = Number(p.payout ?? 0)
-                    const net = realizedPnl(p)
-                    const won = payout > 0
-                    return (
-                      <div key={p.id} className="card p-5 opacity-90">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="font-medium">{p.market?.question || p.market_id}</p>
-                          <span className={`chip ${(p.outcome || p.side) === 'YES' ? 'chip-yes' : 'chip-no'}`}>
-                            {p.outcome || p.side}
-                          </span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-6 font-data text-[11px] text-[var(--color-text-2)]">
-                          <span>Staked <span className="text-[var(--color-text)]">{fmtUct(stake)}</span></span>
-                          {won && <span>Payout <span className="text-[var(--color-gold)]">{fmtUct(payout)}</span></span>}
-                          <span className={net >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}>
-                            Net PnL {net >= 0 ? '+' : ''}{fmtUct(net)}
-                          </span>
-                        </div>
-                        {won && net === 0 && (
-                          <p className="mt-2 font-data text-[10px] text-[var(--color-muted)]">
-                            Outcome won — returned stake (no opposing pool liquidity).
-                          </p>
-                        )}
-                      </div>
-                    )
-                  })}
+                  {resolvedPositions.map(p => (
+                    <ResolvedPositionCard
+                      key={p.id}
+                      position={p}
+                      trader={identity?.nametag || identity?.directAddress}
+                      onShared={() => onToast('Result link copied', 'success')}
+                    />
+                  ))}
                 </div>
               )}
             </section>

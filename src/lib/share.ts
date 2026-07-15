@@ -33,6 +33,8 @@ export type PositionShareParams = {
   pnl: number
   value?: number
   by?: string
+  /** Set when sharing a settled / resolved position (realized PnL). */
+  resolved?: boolean
 }
 
 /** Compact query: p=YES,25,5,fraey */
@@ -44,6 +46,7 @@ export function encodePositionShareQuery(params: PositionShareParams) {
   ]
   if (params.value != null) parts.push(String(params.value))
   if (params.by) parts.push(params.by.replace(/^@/, ''))
+  if (params.resolved) parts.push('resolved')
   return parts.join(',')
 }
 
@@ -65,6 +68,33 @@ export function marketShareText(market: Pick<Market, 'id' | 'question' | 'yes_po
     `Trade on ${BRAND_NAME}`,
     marketShareUrl(market.id),
   ].join('\n')
+}
+
+export function resolvedPositionShareText(
+  position: Position,
+  netPnl: number,
+  opts?: { trader?: string },
+) {
+  const outcome = position.outcome || position.side
+  const stake = Number(position.stake_amount ?? position.cost_basis ?? 0)
+  const payout = Number(position.payout ?? 0)
+  const question = position.market?.question || 'Resolved position'
+  const trader = opts?.trader?.replace(/^@/, '')
+  const url = positionShareUrl(position.market_id, {
+    side: String(outcome),
+    stake,
+    pnl: netPnl,
+    value: payout,
+    by: trader,
+    resolved: true,
+  })
+  const lines = [
+    trader ? `${trader} on ${BRAND_NAME}` : `My ${BRAND_NAME} result`,
+    `${outcome} · ${question}`,
+    `Staked ${fmtUct(stake)} · Payout ${fmtUct(payout)} · Realized PnL ${netPnl >= 0 ? '+' : ''}${fmtUct(netPnl)}`,
+    url,
+  ]
+  return lines.join('\n')
 }
 
 export function positionShareText(
@@ -96,17 +126,20 @@ export function positionShareText(
 export function parsePositionShareParams(search: URLSearchParams): PositionShareParams | null {
   const compact = search.get('p')
   if (compact) {
-    const [side, stakeRaw, pnlRaw, valueRaw, by] = compact.split(',')
+    const parts = compact.split(',')
+    const [side, stakeRaw, pnlRaw, valueRaw, by, status] = parts
     const stake = Number(stakeRaw)
     const pnl = Number(pnlRaw)
     if (!side || !Number.isFinite(stake) || !Number.isFinite(pnl)) return null
     const value = Number(valueRaw)
+    const resolved = status === 'resolved' || parts[parts.length - 1] === 'resolved'
     return {
       side,
       stake,
       pnl,
       value: Number.isFinite(value) ? value : undefined,
-      by: by || undefined,
+      by: by && by !== 'resolved' ? by : undefined,
+      resolved,
     }
   }
 
