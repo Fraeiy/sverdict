@@ -102,6 +102,16 @@ Each trigger runs **Treasury Agent** on GitHub (18 passes, ~45s apart) — withd
 
 `GITHUB_PAT` is server-only — never prefix with `VITE_`.
 
+**If curl returns `GitHub dispatch HTTP 404`:** the PAT cannot see `Fraeiy/sphere-predict` (wrong account, missing scope, or extra whitespace).
+
+1. GitHub → Settings → Developer settings → **Personal access tokens → Tokens (classic)**
+2. Generate new token — scope: **`repo`** only
+3. Must be logged in as **Fraeiy** (repo owner)
+4. Vercel → `GITHUB_PAT` → paste token (no spaces/newlines) → **Redeploy**
+5. Retry curl — expect `{"ok":true,...}`
+
+**Rotate `CRON_SECRET`** if you ever pasted it in chat or logs.
+
 **If Actions shows red X at ~20m:** the job hit its timeout. Current workflow uses a single pass with a 20m timeout.
 
 Check last worker activity: Supabase `treasury_status.updated_at` or Admin → on-chain treasury timestamp.
