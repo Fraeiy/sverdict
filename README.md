@@ -93,6 +93,7 @@ See **[PRODUCTION.md](./PRODUCTION.md)** for the full setup:
 1. Supabase — push migrations, deploy edge function
 2. Vercel — set env vars, deploy frontend
 3. GitHub Actions — treasury + DM workers (secrets: `TREASURY_MNEMONIC`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+4. Vercel Cron — `GITHUB_PAT` + `CRON_SECRET` in Vercel env → agent every 5 min without your PC (see PRODUCTION.md)
 
 Before deploying to Vercel:
 

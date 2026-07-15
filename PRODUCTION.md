@@ -75,11 +75,32 @@ Withdrawals are queued in Postgres. The **treasury agent** sends UCT on Sphere t
 
 Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loop first, then DMs).
 
-**GitHub schedule is not real-time.** Native schedule can gap **60–120+ minutes**. Mitigations in-repo:
+**No PC required.** The treasury agent runs on **GitHub Actions** in the cloud. Your computer can be off.
 
-1. **treasury-dispatch-cron.yml** — every **5 min**, uses `GITHUB_TOKEN` (no PAT required) to `repository_dispatch` the main agent.
-2. **Multi-pass runs** — each agent job runs **18 passes** (~45s apart) before exiting.
-3. **External cron (optional)** — `npm run treasury:trigger` every **5 min** from cron-job.org or `npm run treasury:schedule-install` on Windows.
+**GitHub’s native schedule can gap 60–120+ minutes.** Use one of these free triggers (pick one):
+
+| Method | Cost | PC needed? | Setup |
+|--------|------|------------|--------|
+| **Vercel Cron** (recommended) | Free on Hobby | No | See below |
+| GitHub `treasury-dispatch-cron.yml` | Free | No | Enable Actions |
+| [cron-job.org](https://cron-job.org) | Free | No | POST to GitHub dispatch API |
+
+Each trigger runs **Treasury Agent** on GitHub (18 passes, ~45s apart) — withdrawals, seeds, DMs.
+
+### Vercel Cron setup (recommended — already on your deploy)
+
+1. GitHub → Settings → Developer settings → **Personal access token (classic)** → `repo` scope.
+2. Vercel → Project → **Settings → Environment Variables** (Production):
+
+| Variable | Value |
+|----------|--------|
+| `GITHUB_PAT` | your classic PAT |
+| `CRON_SECRET` | random string (e.g. `openssl rand -hex 24`) |
+
+3. Redeploy (or push a commit). `vercel.json` calls `/api/treasury-tick` every **5 minutes**.
+4. Test once: `curl -H "Authorization: Bearer <CRON_SECRET>" https://sverdict.vercel.app/api/treasury-tick` → `{"ok":true,...}`
+
+`GITHUB_PAT` is server-only — never prefix with `VITE_`.
 
 **If Actions shows red X at ~20m:** the job hit its timeout. Current workflow uses a single pass with a 20m timeout.
 
@@ -110,23 +131,14 @@ npm run dm:worker                 # process DM queue
 npm run dm:worker:dry-run
 ```
 
-### Faster triggers for mainnet (recommended)
-
-Observed schedule gaps on this repo: **~67–125 minutes** between GitHub “Scheduled” runs (each run ~10 min). That is normal GitHub behavior, not a misconfigured cron.
-
-Use one of:
+### Manual / backup triggers
 
 1. **Manual** — GitHub → Actions → Treasury Agent → **Run workflow**
-2. **External cron (recommended)** — reliable 5–10 min triggers:
-   - Create a GitHub classic PAT with `repo` scope
-   - On [cron-job.org](https://cron-job.org): every **10 minutes**, POST to  
-     `https://api.github.com/repos/Fraeiy/sphere-predict/dispatches`  
-     Headers: `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`  
-     Body: `{"event_type":"treasury-tick"}`
-   - Or locally / VPS: `GITHUB_PAT=ghp_... npm run treasury:trigger`
-   - **Windows:** add `GITHUB_PAT` to `.env`, then `npm run treasury:schedule-install` (Task Scheduler every 10 min)
-   - **GitHub backup:** add `TREASURY_TRIGGER_PAT` secret — `.github/workflows/treasury-dispatch-cron.yml` pings every 10 min
-3. **Always-on loop** — small VPS: `npm run treasury:worker:loop` (polls every 60s)
+2. **cron-job.org** (free, no Vercel env): every **5 min**, POST to  
+   `https://api.github.com/repos/Fraeiy/sphere-predict/dispatches`  
+   Headers: `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`  
+   Body: `{"event_type":"treasury-tick"}`
+3. **Windows (dev only):** `npm run treasury:schedule-install` — not needed if Vercel Cron is set up
 
 Admin UI shows **Treasury worker → last on-chain publish** from `treasury_status.updated_at`.
 
