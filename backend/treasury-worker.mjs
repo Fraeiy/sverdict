@@ -25,7 +25,7 @@ import { normalizeRecipient, rawToHuman } from './lib/constants.mjs'
 import { buildSeedMemo, buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
-import { consolidateTreasuryCoins, prepareInventoryForWithdrawal } from './lib/treasuryConsolidate.mjs'
+import { consolidateTreasuryCoins, prepareInventoryForWithdrawal, treasuryConsolidationEnabled } from './lib/treasuryConsolidate.mjs'
 import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInventory.mjs'
 import { publishTreasuryStatus } from './lib/treasuryStatus.mjs'
 import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
@@ -702,7 +702,11 @@ async function runOnce() {
   }
 
   const sphere = await prepareTreasurySphere(await initSphere())
-  await consolidateTreasuryCoins(sphere)
+  if (treasuryConsolidationEnabled()) {
+    await consolidateTreasuryCoins(sphere)
+  } else {
+    console.log('[treasury-agent] auto-consolidate disabled (set TREASURY_CONSOLIDATE_ENABLED=true to enable)')
+  }
   const seeds = await processMarketSeeds(db, sphere)
   const n = await processWithdrawals(db, sphere)
   await publishTreasuryStatus(db, sphere)

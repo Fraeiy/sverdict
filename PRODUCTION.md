@@ -177,7 +177,9 @@ Creating a market no longer debits a fake Postgres ledger. Instead:
 
 Run migration `014_on_chain_market_seeds.sql` in Supabase SQL Editor if `supabase:push` hangs.
 
-Before mainnet: fund `@sphere-predict` with enough UCT for seeds + withdrawals + buffer. The worker consolidates small UCT coins before each withdrawal (default: when treasury holds 2+ coins) to reduce multi-line payouts.
+Before mainnet: fund `@sphere-predict` with enough UCT for seeds + withdrawals + buffer.
+
+**Auto-consolidate is OFF by default** (`TREASURY_CONSOLIDATE_ENABLED=false`). Self-transfers (`SP:v1:consolidate`) fight the Sphere browser if you log into `@sphere-predict` manually — you may see "Sent" without matching "Received". Withdrawals may arrive as multiple inbox lines; that is OK. Only enable consolidation on a dedicated agent device with no browser session.
 
 ### Withdrawal delivery (multiple Sphere inbox lines)
 

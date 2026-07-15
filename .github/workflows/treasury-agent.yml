@@ -58,7 +58,5 @@ jobs:
           SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
           TREASURY_MAX_PASSES: '18'
           TREASURY_POLL_MS: '45000'
-          TREASURY_CONSOLIDATE_MIN_COINS: '2'
-          TREASURY_CONSOLIDATE_MAX_OPS: '5'
-          TREASURY_PREWITHDRAW_MAX_OPS: '8'
+          TREASURY_CONSOLIDATE_ENABLED: 'false'
         run: npm run treasury:worker -- --loop

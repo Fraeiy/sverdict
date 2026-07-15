@@ -2,6 +2,12 @@ import { formatWithdrawalAmount } from './withdrawAmount.mjs'
 import { estimateDeliveryCount, summarizeUctInventory } from './treasuryInventory.mjs'
 
 // Merge small UCT coins via self-transfer before withdrawals (reduces multi-line payouts).
+// OFF by default — self-sends + browser @sphere-predict sessions cause wallet-api drift.
+export function treasuryConsolidationEnabled() {
+  const flag = String(process.env.TREASURY_CONSOLIDATE_ENABLED || 'false').trim().toLowerCase()
+  return flag === '1' || flag === 'true' || flag === 'yes'
+}
+
 const DEFAULT_MIN_COINS = Number(process.env.TREASURY_CONSOLIDATE_MIN_COINS || 2)
 const DEFAULT_MAX_OPS = Number(process.env.TREASURY_CONSOLIDATE_MAX_OPS || 5)
 const PREWITHDRAW_MAX_OPS = Number(process.env.TREASURY_PREWITHDRAW_MAX_OPS || 8)
@@ -25,6 +31,10 @@ export async function consolidateTreasuryCoins(sphere, {
   maxOps = DEFAULT_MAX_OPS,
   dryRun = false,
 } = {}) {
+  if (!treasuryConsolidationEnabled()) {
+    const inv = summarizeUctInventory(sphere)
+    return { merged: 0, tokenCountBefore: inv.tokenCount, tokenCountAfter: inv.tokenCount, skipped: true }
+  }
   const inventory = summarizeUctInventory(sphere)
   if (inventory.tokenCount < minCoins || inventory.tokens.length < 2) {
     return { merged: 0, tokenCountBefore: inventory.tokenCount, tokenCountAfter: inventory.tokenCount }
@@ -93,13 +103,16 @@ export async function consolidateTreasuryCoins(sphere, {
 export async function prepareInventoryForWithdrawal(sphere, amountRaw, {
   maxOps = PREWITHDRAW_MAX_OPS,
 } = {}) {
+  const last = summarizeUctInventory(sphere)
+  if (!treasuryConsolidationEnabled()) return last
+
   let ops = 0
-  let last = summarizeUctInventory(sphere)
+  let inv = last
 
   while (ops < maxOps) {
-    if (last.tokenCount <= 1 && last.largestRaw >= amountRaw) break
-    if (last.largestRaw >= amountRaw && estimateDeliveryCount(last.tokens, amountRaw) === 1) break
-    if (last.tokenCount < 2) break
+    if (inv.tokenCount <= 1 && inv.largestRaw >= amountRaw) break
+    if (inv.largestRaw >= amountRaw && estimateDeliveryCount(inv.tokens, amountRaw) === 1) break
+    if (inv.tokenCount < 2) break
 
     const pass = await consolidateTreasuryCoins(sphere, { minCoins: 2, maxOps: 1 })
     if (!pass.merged) break
@@ -109,15 +122,15 @@ export async function prepareInventoryForWithdrawal(sphere, amountRaw, {
       await sphere.payments.receive?.()
     } catch { /* best-effort */ }
 
-    last = summarizeUctInventory(sphere)
+    inv = summarizeUctInventory(sphere)
   }
 
   if (ops > 0) {
     console.log(
       `[treasury-agent] pre-withdraw prep — ${ops} consolidate op(s); `
-      + `inventory ${last.tokenCount} coin(s), largest ${formatWithdrawalAmount(last.largestHuman)} UCT`,
+      + `inventory ${inv.tokenCount} coin(s), largest ${formatWithdrawalAmount(inv.largestHuman)} UCT`,
     )
   }
 
-  return last
+  return inv
 }
