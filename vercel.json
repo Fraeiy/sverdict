@@ -9,12 +9,6 @@
     "VITE_SITE_URL": "https://sverdict.vercel.app",
     "SITE_URL": "https://sverdict.vercel.app"
   },
-  "crons": [
-    {
-      "path": "/api/treasury-tick",
-      "schedule": "*/5 * * * *"
-    }
-  ],
   "functions": {
     "api/share.js": {
       "maxDuration": 10

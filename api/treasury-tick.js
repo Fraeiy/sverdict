@@ -1,5 +1,6 @@
 /**
- * Vercel Cron → GitHub repository_dispatch → Treasury Agent workflow.
+ * External cron (cron-job.org) → GitHub repository_dispatch → Treasury Agent.
+ * Vercel Hobby cannot run 5-min Vercel Cron — use cron-job.org instead.
  *
  * Vercel env (server-only, never VITE_*):
  *   GITHUB_PAT   — classic PAT with repo scope (or fine-grained Actions write)

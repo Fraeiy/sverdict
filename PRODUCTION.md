@@ -81,24 +81,24 @@ Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loo
 
 | Method | Cost | PC needed? | Setup |
 |--------|------|------------|--------|
-| **Vercel Cron** (recommended) | Free on Hobby | No | See below |
+| **cron-job.org → `/api/treasury-tick`** (recommended) | Free | No | See below |
 | GitHub `treasury-dispatch-cron.yml` | Free | No | Enable Actions |
-| [cron-job.org](https://cron-job.org) | Free | No | POST to GitHub dispatch API |
+| cron-job.org → GitHub dispatch API | Free | No | Alternative |
+
+> **Note:** Vercel Hobby allows only **one cron per day**, so we use [cron-job.org](https://cron-job.org) (free) to ping `/api/treasury-tick` every 5 minutes instead of Vercel Cron.
 
 Each trigger runs **Treasury Agent** on GitHub (18 passes, ~45s apart) — withdrawals, seeds, DMs.
 
-### Vercel Cron setup (recommended — already on your deploy)
+### cron-job.org setup (recommended — no PC)
 
-1. GitHub → Settings → Developer settings → **Personal access token (classic)** → `repo` scope.
-2. Vercel → Project → **Settings → Environment Variables** (Production):
-
-| Variable | Value |
-|----------|--------|
-| `GITHUB_PAT` | your classic PAT |
-| `CRON_SECRET` | random string (e.g. `openssl rand -hex 24`) |
-
-3. Redeploy (or push a commit). `vercel.json` calls `/api/treasury-tick` every **5 minutes**.
-4. Test once: `curl -H "Authorization: Bearer <CRON_SECRET>" https://sverdict.vercel.app/api/treasury-tick` → `{"ok":true,...}`
+1. GitHub PAT + `CRON_SECRET` in **Vercel env** (you already did this).
+2. Redeploy production so `/api/treasury-tick` exists.
+3. [cron-job.org](https://cron-job.org) → Create cronjob:
+   - **URL:** `https://sverdict.vercel.app/api/treasury-tick`
+   - **Schedule:** every **5 minutes**
+   - **Request method:** GET
+   - **Headers:** `Authorization: Bearer <your CRON_SECRET>`
+4. Test: `curl -H "Authorization: Bearer <CRON_SECRET>" https://sverdict.vercel.app/api/treasury-tick` → `{"ok":true,...}`
 
 `GITHUB_PAT` is server-only — never prefix with `VITE_`.
 
