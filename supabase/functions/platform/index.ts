@@ -77,9 +77,20 @@ const cors = {
 
 const ADMIN_WALLETS = new Set([
   'fraey',
+  'fraeiy',
   'sphere-predict',
   'direct://00003db7de43899584dd9a5306096750f32e4c06b201c8e99adf4b8e34e4f2d94dde41318434',
+  'direct://0000df85e5901b1292f01c846d38d9f2df7709ad93c7a83ab9dea4d17e0d0794b613b40ff668',
 ])
+
+function effectiveIsAdmin(user: { is_admin?: boolean }, auth: WalletAuth) {
+  return !!(
+    user.is_admin
+    || isAdminWallet(auth.walletAddress)
+    || isAdminWallet(auth.nametag)
+    || isAdminWallet(auth.directAddress)
+  )
+}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
@@ -217,9 +228,10 @@ async function applyUserProfilePatch(
   user: Record<string, unknown>,
   auth: WalletAuth,
 ) {
-  const updates: Record<string, string | null> = {}
+  const updates: Record<string, string | boolean | null> = {}
   if (auth.nametag && !user.nametag) updates.nametag = auth.nametag
   if (auth.publicKey && !user.public_key) updates.public_key = auth.publicKey
+  if (effectiveIsAdmin(user as { is_admin?: boolean }, auth) && !user.is_admin) updates.is_admin = true
   if (!Object.keys(updates).length) return user
   const { data, error } = await db.from('users').update(updates).eq('id', user.id).select('*').single()
   if (error) throw new Error(error.message)
@@ -699,9 +711,11 @@ Deno.serve(async (req) => {
     }
 
     if (!walletAddress) return json({ error: 'Wallet authentication required' })
-    const user = await findOrCreateUser(db, { walletAddress, nametag, directAddress, publicKey })
+    const authCtx = { walletAddress, nametag, directAddress, publicKey }
+    const user = await findOrCreateUser(db, authCtx)
+    const userWithAdmin = { ...user, is_admin: effectiveIsAdmin(user, authCtx) }
 
-    if (route === '/auth') return json({ user, portfolio: await getPortfolio(db, user.id) })
+    if (route === '/auth') return json({ user: userWithAdmin, portfolio: await getPortfolio(db, user.id) })
     if (route === '/portfolio') return json(await getPortfolio(db, user.id))
 
     if (route === '/settings') {
@@ -714,7 +728,7 @@ Deno.serve(async (req) => {
             nametag: user.nametag,
             wallet_address: user.wallet_address,
             public_key: user.public_key,
-            is_admin: user.is_admin,
+            is_admin: effectiveIsAdmin(user, authCtx),
           },
         })
       }
