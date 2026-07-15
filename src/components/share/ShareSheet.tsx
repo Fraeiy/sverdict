@@ -25,7 +25,6 @@ type Props = {
     pnl?: number
     trader?: string
     resolved?: boolean
-    meme?: { emoji: string; label: string; caption: string }
   }
 }
 
@@ -101,30 +100,6 @@ export function ShareSheet({ open, title, shareText, shareUrl, onClose, onCopied
               <p className="link-preview-desc">
                 {preview?.description || card?.subline || `${BRAND_NAME} · Sphere prediction market`}
               </p>
-            </div>
-          </div>
-        )}
-
-        {card?.meme && (
-          <div
-            className={`mb-4 flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
-              pnl > 0
-                ? 'border-[rgba(74,222,128,0.35)] bg-[rgba(74,222,128,0.08)]'
-                : pnl < 0
-                  ? 'border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)]'
-                  : 'border-[var(--color-border)] bg-[var(--color-surface-4)]'
-            }`}
-          >
-            <span className="text-2xl leading-none" aria-hidden>{card.meme.emoji}</span>
-            <div>
-              <p className="font-data text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                {card.meme.label} · {card.meme.caption}
-              </p>
-              {card.pnl != null && (
-                <p className={`font-data text-sm font-bold ${pnl >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
-                  {pnl >= 0 ? '+' : ''}{fmtUct(pnl)} {card.resolved ? 'realized' : ''}
-                </p>
-              )}
             </div>
           </div>
         )}

@@ -1,5 +1,3 @@
-import { pnlMemeFor } from './pnlMeme.mjs'
-
 export const BRAND = 'Sverdict'
 export const LOGO_PATH = '/logo.jpg'
 export const DEFAULT_SITE = 'https://sverdict.vercel.app'
@@ -150,12 +148,6 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
   const creator = market.creator_nametag?.replace(/^@/, '') || undefined
 
   const isResolved = !!position?.resolved
-  const meme = position
-    ? pnlMemeFor(position.pnl, position.stake, {
-        resolved: isResolved,
-        wonOutcome: (position.value ?? 0) > 0,
-      })
-    : null
 
   let description
   if (position) {
@@ -163,8 +155,8 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
     if (isResolved) {
       const payoutLabel = position.value != null ? fmtUct(position.value) : null
       description = trader
-        ? `@${trader} · ${side} · ${meme.caption} ${meme.emoji} · Realized ${pnlLabel}${payoutLabel ? ` · Payout ${payoutLabel}` : ''}`
-        : `${side} · ${meme.caption} · Realized PnL ${pnlLabel} — ${BRAND}`
+        ? `@${trader} · ${side} · Staked ${fmtUct(position.stake)} · Realized ${pnlLabel}${payoutLabel ? ` · Payout ${payoutLabel}` : ''}`
+        : `${side} · Staked ${fmtUct(position.stake)} · Realized PnL ${pnlLabel} — ${BRAND}`
     } else {
       description = trader
         ? `@${trader} · ${side} · Staked ${fmtUct(position.stake)} · PnL ${pnlLabel}`
@@ -189,7 +181,6 @@ export function buildShareMeta({ origin, code, market, position, positionParam }
     creator,
     isPosition: !!position,
     isResolved,
-    meme,
     isFallback: false,
   }
 }

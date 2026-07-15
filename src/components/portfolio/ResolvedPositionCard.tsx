@@ -5,7 +5,6 @@ import { ShareIcon } from '../ui/ShareIcon'
 import type { Position } from '../../lib/types'
 import { positionShareUrl, resolvedPositionShareText } from '../../lib/share'
 import { fmtUct, realizedPnl, yesProbability } from '../../lib/format'
-import { pnlMemeFor } from '../../lib/pnlMeme'
 
 type Props = {
   position: Position
@@ -20,7 +19,6 @@ export function ResolvedPositionCard({ position, trader, onShared }: Props) {
   const payout = Number(position.payout ?? 0)
   const net = realizedPnl(position)
   const won = payout > 0
-  const meme = pnlMemeFor(net, stake, { resolved: true, wonOutcome: won })
   const shareText = resolvedPositionShareText(position, net, { trader })
   const shareUrl = positionShareUrl(position.market_id, {
     side: String(outcome),
@@ -34,12 +32,10 @@ export function ResolvedPositionCard({ position, trader, onShared }: Props) {
 
   return (
     <>
-      <div className="card card-hover relative p-5 opacity-95">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <Link to={`/markets/${position.market_id}`} className="min-w-0 flex-1 pr-2">
-            <p className="line-clamp-2 font-medium leading-snug text-[var(--color-text)]">
-              {position.market?.question || 'Resolved position'}
-            </p>
+      <div className="card card-hover relative p-5 opacity-90">
+        <div className="flex items-center justify-between gap-3">
+          <Link to={`/markets/${position.market_id}`} className="min-w-0 flex-1">
+            <p className="font-medium">{position.market?.question || position.market_id}</p>
           </Link>
           <div className="flex shrink-0 items-center gap-2">
             <span className={`chip ${outcome === 'YES' ? 'chip-yes' : 'chip-no'}`}>
@@ -55,47 +51,18 @@ export function ResolvedPositionCard({ position, trader, onShared }: Props) {
             </button>
           </div>
         </div>
-
-        <div
-          className={`mb-3 flex items-center gap-3 rounded-lg border px-3 py-2 ${
-            net > 0
-              ? 'border-[rgba(74,222,128,0.35)] bg-[rgba(74,222,128,0.08)]'
-              : net < 0
-                ? 'border-[rgba(248,113,113,0.35)] bg-[rgba(248,113,113,0.08)]'
-                : 'border-[var(--color-border)] bg-[var(--color-surface-4)]'
-          }`}
-        >
-          <span className="text-2xl leading-none" aria-hidden>{meme.emoji}</span>
-          <div className="min-w-0">
-            <p className="font-data text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-              {meme.label} · {meme.caption}
-            </p>
-            <p className={`font-data text-sm font-bold ${net >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
-              {net >= 0 ? '+' : ''}{fmtUct(net)} realized
-            </p>
-          </div>
-        </div>
-
         <Link to={`/markets/${position.market_id}`} className="block">
-          <div className="grid grid-cols-3 gap-3 border-t border-[var(--color-border)] pt-3">
-            <div>
-              <p className="label-caps">Staked</p>
-              <p className="mt-1 font-data text-sm font-bold">{fmtUct(stake)}</p>
-            </div>
-            <div>
-              <p className="label-caps">Payout</p>
-              <p className="mt-1 font-data text-sm font-bold text-[var(--color-gold)]">{fmtUct(payout)}</p>
-            </div>
-            <div>
-              <p className="label-caps">Net PnL</p>
-              <p className={`mt-1 font-data text-sm font-bold ${net >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}`}>
-                {net >= 0 ? '+' : ''}{fmtUct(net)}
-              </p>
-            </div>
+          <div className="mt-3 flex flex-wrap gap-6 font-data text-[11px] text-[var(--color-text-2)]">
+            <span>Staked <span className="text-[var(--color-text)]">{fmtUct(stake)}</span></span>
+            {won && (
+              <span>Payout <span className="text-[var(--color-gold)]">{fmtUct(payout)}</span></span>
+            )}
+            <span className={net >= 0 ? 'text-[var(--color-yes)]' : 'text-[var(--color-no)]'}>
+              Net PnL {net >= 0 ? '+' : ''}{fmtUct(net)}
+            </span>
           </div>
-
           {won && net === 0 && (
-            <p className="mt-3 font-data text-[10px] text-[var(--color-muted)]">
+            <p className="mt-2 font-data text-[10px] text-[var(--color-muted)]">
               Outcome won — returned stake (no opposing pool liquidity).
             </p>
           )}
@@ -111,8 +78,8 @@ export function ResolvedPositionCard({ position, trader, onShared }: Props) {
         onCopied={() => onShared?.()}
         preview={{
           headline: position.market?.question || 'Resolved position',
-          description: `${meme.emoji} ${meme.caption} · ${outcome} · Realized ${net >= 0 ? '+' : ''}${fmtUct(net)}`,
-          badge: meme.label,
+          description: `${outcome} · Staked ${fmtUct(stake)} · Realized ${net >= 0 ? '+' : ''}${fmtUct(net)}`,
+          badge: outcome,
           imageAccent: outcome === 'YES' ? yes : 100 - yes,
         }}
         card={{
@@ -123,7 +90,6 @@ export function ResolvedPositionCard({ position, trader, onShared }: Props) {
           pnl: net,
           trader,
           resolved: true,
-          meme,
         }}
       />
     </>
