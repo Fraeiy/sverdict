@@ -13,7 +13,8 @@ import { resolveUctDecimals } from './uctAmount.mjs'
 
 const DEFAULT_INTERVAL_MS = Number(process.env.TREASURY_FAUCET_INTERVAL_MS || 3_600_000)
 const DEFAULT_MIN_BALANCE = Number(process.env.TREASURY_FAUCET_MIN_BALANCE_UCT || 100)
-const DEFAULT_MINT_UCT = Number(process.env.TREASURY_FAUCET_MINT_UCT || 500)
+/** Match Sphere wallet UI testnet top-up (~100 UCT). SDK allows more; 100 is safer. */
+const DEFAULT_MINT_UCT = Number(process.env.TREASURY_FAUCET_MINT_UCT || 100)
 
 function isTestnetNetwork() {
   const net = String(sphereNetwork() || '').trim().toLowerCase()

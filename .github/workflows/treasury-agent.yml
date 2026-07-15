@@ -62,5 +62,5 @@ jobs:
           TREASURY_FAUCET_ENABLED: 'true'
           TREASURY_FAUCET_INTERVAL_MS: '3600000'
           TREASURY_FAUCET_MIN_BALANCE_UCT: '100'
-          TREASURY_FAUCET_MINT_UCT: '500'
+          TREASURY_FAUCET_MINT_UCT: '100'
         run: npm run treasury:worker -- --loop
