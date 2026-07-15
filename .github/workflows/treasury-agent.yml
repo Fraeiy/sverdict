@@ -59,4 +59,8 @@ jobs:
           TREASURY_MAX_PASSES: '18'
           TREASURY_POLL_MS: '45000'
           TREASURY_CONSOLIDATE_ENABLED: 'false'
+          TREASURY_FAUCET_ENABLED: 'true'
+          TREASURY_FAUCET_INTERVAL_MS: '3600000'
+          TREASURY_FAUCET_MIN_BALANCE_UCT: '100'
+          TREASURY_FAUCET_MINT_UCT: '500'
         run: npm run treasury:worker -- --loop

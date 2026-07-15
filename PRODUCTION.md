@@ -179,6 +179,8 @@ Run migration `014_on_chain_market_seeds.sql` in Supabase SQL Editor if `supabas
 
 Before mainnet: fund `@sphere-predict` with enough UCT for seeds + withdrawals + buffer.
 
+**Testnet auto top-up (treasury agent):** Sphere testnet2 has no HTTP faucet — the agent self-mints UCT via `mintFungibleToken` when spendable balance drops below **100 UCT**, at most once per **hour** (mints **500 UCT** by default). Controlled by `TREASURY_FAUCET_*` env vars; disabled on non-testnet networks.
+
 **Auto-consolidate is OFF by default** (`TREASURY_CONSOLIDATE_ENABLED=false`). Self-transfers (`SP:v1:consolidate`) fight the Sphere browser if you log into `@sphere-predict` manually — you may see "Sent" without matching "Received". Withdrawals may arrive as multiple inbox lines; that is OK. Only enable consolidation on a dedicated agent device with no browser session.
 
 ### Withdrawal delivery (multiple Sphere inbox lines)

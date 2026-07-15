@@ -27,7 +27,8 @@ import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
 import { consolidateTreasuryCoins, prepareInventoryForWithdrawal, treasuryConsolidationEnabled } from './lib/treasuryConsolidate.mjs'
 import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInventory.mjs'
-import { publishTreasuryStatus } from './lib/treasuryStatus.mjs'
+import { maybeTreasuryFaucet } from './lib/treasuryFaucet.mjs'
+import { publishTreasuryStatus, sumPendingSeeds, sumPendingWithdrawals } from './lib/treasuryStatus.mjs'
 import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
 import { getUctDecimals, initTreasurySphere, isUctAsset, resolveUctCoinId } from './lib/sphereProviders.mjs'
 
@@ -695,6 +696,12 @@ async function runOnce() {
 
   if (DRY_RUN) {
     console.log('[treasury-agent] DRY-RUN — no wallet init, no on-chain sends')
+    const pendingWd = await sumPendingWithdrawals(db)
+    const pendingSeedTotal = await sumPendingSeeds(db)
+    await maybeTreasuryFaucet(null, {
+      spendableHuman: Math.max(0, 0 - pendingWd - pendingSeedTotal),
+      dryRun: true,
+    })
     const seeds = await processMarketSeeds(db, null, { dryRun: true })
     const n = await processWithdrawals(db, null, { dryRun: true })
     console.log(`[treasury-agent] dry-run done — would process ${seeds} seed(s), ${n} withdrawal(s)`)
@@ -702,6 +709,20 @@ async function runOnce() {
   }
 
   const sphere = await prepareTreasurySphere(await initSphere())
+
+  const bal = await refreshSpendableInventoryDeep(sphere)
+  const [pendingWd, pendingSeedTotal] = await Promise.all([
+    sumPendingWithdrawals(db),
+    sumPendingSeeds(db),
+  ])
+  const spendableHuman = Math.max(0, bal.human - pendingWd - pendingSeedTotal)
+  const faucet = await maybeTreasuryFaucet(sphere, { spendableHuman })
+  if (faucet.minted) {
+    await refreshSpendableInventoryDeep(sphere)
+  } else if (faucet.skipped && faucet.reason === 'cooldown') {
+    console.log(`[treasury-agent] faucet cooldown — next top-up in ~${faucet.nextInMinutes} min`)
+  }
+
   if (treasuryConsolidationEnabled()) {
     await consolidateTreasuryCoins(sphere)
   } else {
