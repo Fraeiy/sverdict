@@ -8,6 +8,7 @@ import { buildSeedMemo } from '../../src/lib/paymentMemos.js'
 const MARKET_SEED_LIQUIDITY_UCT = Number(process.env.MARKET_SEED_LIQUIDITY_UCT || 100)
 
 const ADMIN_WALLETS = new Set([
+  'fraey',
   'sphere-predict',
   'DIRECT://00003db7de43899584dd9a5306096750f32e4c06b201c8e99adf4b8e34e4f2d94dde41318434',
 ])

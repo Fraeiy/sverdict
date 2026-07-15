@@ -76,6 +76,7 @@ const cors = {
 }
 
 const ADMIN_WALLETS = new Set([
+  'fraey',
   'sphere-predict',
   'direct://00003db7de43899584dd9a5306096750f32e4c06b201c8e99adf4b8e34e4f2d94dde41318434',
 ])
