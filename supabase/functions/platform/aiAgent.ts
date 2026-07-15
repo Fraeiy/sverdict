@@ -7,11 +7,12 @@ import {
   type AiMarketProposal,
 } from './aiMarketProposals.ts'
 
-/** openrouter/free auto-picks an available free model (old gemma-2-9b IDs are 404). */
+/** Cheap models with reliable JSON + date reasoning; free tier last. */
 const FALLBACK_MODELS = [
+  'google/gemini-2.0-flash-001',
+  'openai/gpt-4o-mini',
+  'google/gemma-3-27b-it:free',
   'openrouter/free',
-  'google/gemma-4-26b-a4b-it:free',
-  'liquid/lfm-2.5-1.2b-instruct:free',
 ]
 const MODEL = Deno.env.get('OPENROUTER_MODEL') ?? FALLBACK_MODELS[0]
 const SITE_URL = Deno.env.get('OPENROUTER_SITE_URL') ?? 'https://sverdict.vercel.app'
@@ -119,7 +120,12 @@ export async function fetchAiMarketProposals(db: SupabaseClient) {
     advisory: true,
     model: MODEL,
     provider: 'openrouter',
-    context: { today: ctx.todayIso, minResolveBy: ctx.minResolveBy, maxResolveBy: ctx.maxResolveBy },
+    context: {
+      today: ctx.todayIso,
+      minResolveBy: ctx.minResolveBy,
+      maxResolveBy: ctx.maxResolveBy,
+      daysOpenRange: [7, 14],
+    },
     filtered: Math.max(0, (result.markets || []).length - proposals.length),
   }
 }

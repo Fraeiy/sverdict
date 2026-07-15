@@ -1,8 +1,9 @@
 /** Keep in sync with supabase/functions/platform/aiMarketProposals.ts */
 
 export const AI_MARKET_CATEGORIES = ['CRYPTO', 'SPORTS', 'POLITICS', 'TECH', 'FINANCE', 'OTHER']
-export const AI_MIN_DAYS_OPEN = 3
-export const AI_MAX_DAYS_OPEN = 90
+/** AI proposals only — manual admin create can use any duration. */
+export const AI_MIN_DAYS_OPEN = 7
+export const AI_MAX_DAYS_OPEN = 14
 
 function utcDayStart(isoDate) {
   return new Date(`${isoDate}T00:00:00.000Z`)
@@ -45,9 +46,10 @@ export function buildMarketProposalSystemPrompt(ctx) {
     + 'description — one sentence context; '
     + 'resolutionCriteria — objective, verifiable rule naming exact data source AND the resolveBy date; '
     + `category — one of ${AI_MARKET_CATEGORIES.join(',')}; `
-    + `resolveBy — YYYY-MM-DD when criteria can be checked (inclusive), between ${ctx.minResolveBy} and ${ctx.maxResolveBy}. `
-    + 'Align question wording with resolveBy (e.g. "by March 2026" must have resolveBy in March 2026). '
-    + 'Prefer near-term events (7–30 days) when possible. No duplicate of existing questions.'
+    + `resolveBy — YYYY-MM-DD when criteria can be checked (inclusive), MUST be between ${ctx.minResolveBy} and ${ctx.maxResolveBy} (7–14 days from today). `
+    + 'Align question wording with resolveBy (e.g. "this week" must resolve within 7 days). '
+    + 'Pick events resolvable inside that window — product launches, earnings, sports fixtures, policy votes. '
+    + 'No duplicate of existing questions.'
   )
 }
 
@@ -60,6 +62,7 @@ export function buildMarketProposalUserPayload(existing, want = 3, ctx) {
     rules: {
       minResolveBy: ctx.minResolveBy,
       maxResolveBy: ctx.maxResolveBy,
+      daysOpenRange: [AI_MIN_DAYS_OPEN, AI_MAX_DAYS_OPEN],
       categories: AI_MARKET_CATEGORIES,
     },
   })

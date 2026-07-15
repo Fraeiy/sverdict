@@ -1,8 +1,9 @@
-const DEFAULT_MODEL = 'openrouter/free'
+const DEFAULT_MODEL = 'google/gemini-2.0-flash-001'
 const FALLBACK_MODELS = [
+  'google/gemini-2.0-flash-001',
+  'openai/gpt-4o-mini',
+  'google/gemma-3-27b-it:free',
   'openrouter/free',
-  'google/gemma-4-26b-a4b-it:free',
-  'liquid/lfm-2.5-1.2b-instruct:free',
 ]
 const SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.SITE_URL || 'https://sverdict.vercel.app'
 

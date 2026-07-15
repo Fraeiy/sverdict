@@ -550,7 +550,7 @@ export function AdminPage({ platform, onToast }: Props) {
               </button>
             </div>
             {aiProposals.length === 0 ? (
-              <p className="text-sm text-[var(--color-muted)]">Click Get suggestions to load 3 draft markets.</p>
+              <p className="text-sm text-[var(--color-muted)]">Click Get suggestions — 3 draft markets, 7–14 days out.</p>
             ) : (
               <div className="space-y-3">
                 {aiProposals.map((p, i) => (
