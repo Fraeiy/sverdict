@@ -872,7 +872,7 @@ Deno.serve(async (req) => {
       return json({ portfolio })
     }
 
-    const admin = user.is_admin || isAdminWallet(walletAddress) || isAdminWallet(nametag)
+    const admin = effectiveIsAdmin(user, authCtx)
     if (!admin) return json({ error: 'Admin access required' })
 
     if (route === '/admin/dashboard') {
