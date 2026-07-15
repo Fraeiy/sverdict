@@ -1,11 +1,11 @@
-# Lightweight ping — triggers Treasury Agent via repository_dispatch every 10 min.
-# Uses GITHUB_TOKEN by default (no extra secret). Optional override: TREASURY_TRIGGER_PAT.
+# Triggers Treasury Agent via repository_dispatch every 5 minutes.
+# Uses GITHUB_TOKEN by default (no PAT required). Optional: TREASURY_TRIGGER_PAT.
 
 name: Treasury Dispatch Cron
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:

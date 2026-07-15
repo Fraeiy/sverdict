@@ -25,7 +25,7 @@ import { normalizeRecipient, rawToHuman } from './lib/constants.mjs'
 import { buildSeedMemo, buildWithdrawMemo } from './lib/paymentMemos.mjs'
 import { loadProjectEnv } from './lib/loadEnv.mjs'
 import { processOutboundDms, queueWithdrawalSentDm } from './lib/outboundDm.mjs'
-import { consolidateTreasuryCoins } from './lib/treasuryConsolidate.mjs'
+import { consolidateTreasuryCoins, prepareInventoryForWithdrawal } from './lib/treasuryConsolidate.mjs'
 import { estimateDeliveryCount, summarizeUctInventory } from './lib/treasuryInventory.mjs'
 import { publishTreasuryStatus } from './lib/treasuryStatus.mjs'
 import { formatWithdrawalAmount, normalizeWithdrawalAmount, withdrawalAmountToRaw } from './lib/withdrawAmount.mjs'
@@ -486,6 +486,7 @@ async function processWithdrawals(db, sphere, { dryRun = false } = {}) {
         continue
       }
 
+      await prepareInventoryForWithdrawal(sphere, sendRaw)
       const inventory = summarizeUctInventory(sphere)
       const estDeliveries = estimateDeliveryCount(inventory.tokens, sendRaw)
       if (inventory.tokenCount > 1) {

@@ -32,7 +32,8 @@ export function PendingWithdrawalBanner({ pending }: Props) {
         ))}
       </ul>
       <p className="mt-3 font-data text-[9px] leading-relaxed text-[var(--color-muted)]">
-        Withdrawals are usually processed in about 30 minutes — sometimes faster, sometimes a bit longer.
+        Treasury agent runs every few minutes. Most withdrawals land within 5–15 minutes.
+        You may see several small incoming lines with the same memo — they should add up to the total above.
       </p>
     </div>
   )

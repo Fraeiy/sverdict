@@ -77,9 +77,9 @@ Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loo
 
 **GitHub schedule is not real-time.** Native schedule can gap **60–120+ minutes**. Mitigations in-repo:
 
-1. **treasury-dispatch-cron.yml** — every 10 min, uses `GITHUB_TOKEN` (no PAT required) to `repository_dispatch` the main agent.
-2. **Multi-pass runs** — each agent job runs **12 passes** (~90s apart) before exiting, so one trigger clears more of the queue.
-3. **External cron (optional)** — `npm run treasury:trigger` every 10 min from cron-job.org or Windows Task Scheduler.
+1. **treasury-dispatch-cron.yml** — every **5 min**, uses `GITHUB_TOKEN` (no PAT required) to `repository_dispatch` the main agent.
+2. **Multi-pass runs** — each agent job runs **18 passes** (~45s apart) before exiting.
+3. **External cron (optional)** — `npm run treasury:trigger` every **5 min** from cron-job.org or `npm run treasury:schedule-install` on Windows.
 
 **If Actions shows red X at ~20m:** the job hit its timeout. Current workflow uses a single pass with a 20m timeout.
 
@@ -155,7 +155,7 @@ Creating a market no longer debits a fake Postgres ledger. Instead:
 
 Run migration `014_on_chain_market_seeds.sql` in Supabase SQL Editor if `supabase:push` hangs.
 
-Before mainnet: fund `@sphere-predict` with enough UCT for seeds + withdrawals + buffer. The worker consolidates small UCT coins via self-transfer when inventory has 4+ coins (reduces withdrawal fragmentation).
+Before mainnet: fund `@sphere-predict` with enough UCT for seeds + withdrawals + buffer. The worker consolidates small UCT coins before each withdrawal (default: when treasury holds 2+ coins) to reduce multi-line payouts.
 
 ### Withdrawal delivery (multiple Sphere inbox lines)
 

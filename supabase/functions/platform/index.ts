@@ -846,7 +846,7 @@ Deno.serve(async (req) => {
         user.id,
         'withdrawal',
         'Withdrawal queued',
-        `${amount.toFixed(2)} UCT queued — treasury will send to your Sphere wallet (may arrive as one or more transfers; total will match).`,
+        `${amount.toFixed(2)} UCT queued — treasury sends within ~5–15 min. Multiple wallet lines with the same memo are normal; they should sum to ${amount.toFixed(2)} UCT.`,
         { amount, withdrawalId: withdrawal?.id },
       ).catch(() => {})
       return json({ portfolio: await getPortfolio(db, user.id), withdrawal })

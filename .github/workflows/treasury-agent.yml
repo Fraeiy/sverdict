@@ -50,12 +50,15 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           echo "Commit: $(git rev-parse HEAD)"
 
-      - name: Run treasury worker (12 passes — seeds, withdrawals, DMs, status)
+      - name: Run treasury worker (18 passes — seeds, withdrawals, DMs, status)
         env:
           TREASURY_MNEMONIC: ${{ secrets.TREASURY_MNEMONIC }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SPHERE_ORACLE_API_KEY: ${{ secrets.SPHERE_ORACLE_API_KEY }}
-          TREASURY_MAX_PASSES: '12'
-          TREASURY_POLL_MS: '90000'
+          TREASURY_MAX_PASSES: '18'
+          TREASURY_POLL_MS: '45000'
+          TREASURY_CONSOLIDATE_MIN_COINS: '2'
+          TREASURY_CONSOLIDATE_MAX_OPS: '5'
+          TREASURY_PREWITHDRAW_MAX_OPS: '8'
         run: npm run treasury:worker -- --loop

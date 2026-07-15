@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $repoRoot '.env'
 $taskName = 'SpherePredict-TreasuryTrigger'
-$intervalMin = 10
+$intervalMin = 5
 
 if (-not (Test-Path $envFile)) {
   Write-Error "Missing .env — add GITHUB_PAT=ghp_... (repo scope) first"
