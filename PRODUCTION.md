@@ -82,8 +82,8 @@ Both run from `.github/workflows/treasury-agent.yml` on a schedule (treasury loo
 | Method | Cost | PC needed? | Setup |
 |--------|------|------------|--------|
 | **cron-job.org → `/api/treasury-tick`** (recommended) | Free | No | See below |
-| GitHub `treasury-dispatch-cron.yml` | Free | No | Enable Actions |
-| cron-job.org → GitHub dispatch API | Free | No | Alternative |
+| GitHub **Treasury Agent** schedule | Free | No | Built-in (`3,13,23…`); can gap 60–120+ min |
+| Manual **Run workflow** | Free | No | Actions → Treasury Agent |
 
 > **Note:** Vercel Hobby allows only **one cron per day**, so we use [cron-job.org](https://cron-job.org) (free) to ping `/api/treasury-tick` every 5 minutes instead of Vercel Cron.
 

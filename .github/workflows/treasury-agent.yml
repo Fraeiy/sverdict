@@ -3,7 +3,7 @@
 # Optional: SPHERE_ORACLE_API_KEY, TREASURY_DEVICE_ID (else persisted in .treasury-data cache)
 #
 # Each run performs multiple passes (~90s apart) so one trigger clears more of the queue.
-# treasury-dispatch-cron.yml triggers this via workflow_dispatch every 5 min (GITHUB_TOKEN OK).
+# Also triggered by cron-job.org → /api/treasury-tick (Vercel) or manual Run workflow.
 
 name: Treasury Agent
 
