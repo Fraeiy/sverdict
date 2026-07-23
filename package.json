@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
-    "@unicitylabs/sphere-sdk": "^0.10.3",
+    "@unicitylabs/sphere-sdk": "^0.12.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/og": "^0.11.1",
     "localtunnel": "^2.0.2",
